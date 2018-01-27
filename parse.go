@@ -17,7 +17,7 @@ type parser struct {
 }
 
 // creates new parser
-func create(r Reader) *parser {
+func createParser(r Reader) *parser {
 	p := new(parser)
 	p.reader = r
 	p.repeatRuleApply = false
@@ -32,19 +32,21 @@ func (p *parser) reset() {
 	p.parsedEvents = []*Event{}
 }
 
-func (p *parser) read(cal *Calendar) {
+func (p *parser) read(cal *Calendar) error {
 	p.reset()
 
 	content, err := p.reader.Read()
 	if err != nil {
 		p.errorsOccured = append(p.errorsOccured, err)
-		return
+		return err
 	}
 
-	// parse the ICal calendar
 	p.parseContent(cal, content)
 
-	return
+	if len(p.errorsOccured) == 0 {
+		return nil
+	}
+	return fmt.Errorf("Reading calendar content has errors")
 }
 
 // returns the array with the errors occurred while parsing the events

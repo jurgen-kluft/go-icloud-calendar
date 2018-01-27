@@ -2,276 +2,106 @@ package icalendar
 
 import (
 	"fmt"
-	"io/ioutil"
-	"os"
 	"reflect"
 	"testing"
 	"time"
 )
 
 func TestLoadCalendar(t *testing.T) {
-	parser := New()
-	calBytes, err := ioutil.ReadFile("testCalendars/2eventsCal.ics")
+	reader := readingFromFile("testCalendars/2eventsCal.ics")
+	parser := createParser(reader)
+
+	calendar := New()
+	err := parser.read(calendar)
+
 	if err != nil {
-		t.Errorf("Failed to read calendar file ( %s )", err)
-	}
-
-	parser.Load(string(calBytes))
-
-	parseErrors, err := parser.GetErrors()
-	if err != nil {
-		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
-	}
-	for i, pErr := range parseErrors {
-		t.Errorf("Parsing Error №%d: %s", i, pErr)
-	}
-
-	calendars, errCal := parser.GetCalendars()
-	if errCal != nil {
-		t.Errorf("Failed to get calendars ( %s )", errCal)
-	}
-	if len(calendars) != 1 {
-		t.Errorf("Expected 1 calendar, found %d calendars", len(calendars))
+		parseErrors := parser.getErrors()
+		for i, pErr := range parseErrors {
+			t.Errorf("Parsing Error №%d: %s", i, pErr)
+		}
 	}
 }
 
 func TestNewParser(t *testing.T) {
-	parser := New()
+	reader := readingFromFile("testCalendars/2eventsCal.ics")
+	parser := createParser(reader)
 	rType := fmt.Sprintf("%v", reflect.TypeOf(parser))
-	if rType != "*ics.Parser" {
-		t.Errorf("Failed to create a Parser !")
+	if rType != "*icalendar.parser" {
+		t.Errorf("Failed to create *icalendar.Parser !")
 	}
-}
-
-func TestNewParserChans(t *testing.T) {
-	parser := New()
-	input := parser.GetInputChan()
-	output := parser.GetOutputChan()
-
-	rType := fmt.Sprintf("%v", reflect.TypeOf(input))
-
-	if rType != "chan string" {
-		t.Errorf("Failed to create a input chan! Received: Type %s Value %s", rType, input)
-	}
-
-	rType = fmt.Sprintf("%v", reflect.TypeOf(output))
-	if rType != "chan *ics.Event" {
-		t.Errorf("Failed to create a output chan! Received: Type %s Value %s", rType, output)
-	}
-}
-
-func TestParsing0Calendars(t *testing.T) {
-	parser := New()
-	parser.Wait()
-
-	parseErrors, err := parser.GetErrors()
-
-	if err != nil {
-		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
-	}
-	for i, pErr := range parseErrors {
-		t.Errorf("Parsing Error №%d: %s", i, pErr)
-	}
-}
-
-func TestParsing1Calendars(t *testing.T) {
-	parser := New()
-	input := parser.GetInputChan()
-	input <- "testCalendars/2eventsCal.ics"
-	parser.Wait()
-
-	parseErrors, err := parser.GetErrors()
-
-	if err != nil {
-		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
-	}
-	for i, pErr := range parseErrors {
-		t.Errorf("Parsing Error №%d: %s", i, pErr)
-	}
-
-	calendars, errCal := parser.GetCalendars()
-
-	if errCal != nil {
-		t.Errorf("Failed to get calendars ( %s )", errCal)
-	}
-
-	if len(calendars) != 1 {
-		t.Errorf("Expected 1 calendar, found %d calendars", len(calendars))
-	}
-
-}
-
-func TestParsing2Calendars(t *testing.T) {
-	parser := New()
-	input := parser.GetInputChan()
-	input <- "testCalendars/2eventsCal.ics"
-	input <- "testCalendars/3eventsNoAttendee.ics"
-	parser.Wait()
-
-	parseErrors, err := parser.GetErrors()
-
-	if err != nil {
-		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
-	}
-	for i, pErr := range parseErrors {
-		t.Errorf("Parsing Error №%d: %s", i, pErr)
-	}
-
-	calendars, errCal := parser.GetCalendars()
-
-	if errCal != nil {
-		t.Errorf("Failed to get calendars ( %s )", errCal)
-	}
-
-	if len(calendars) != 2 {
-		t.Errorf("Expected 1 calendar, found %d calendars", len(calendars))
-	}
-
 }
 
 func TestParsingNotExistingCalendar(t *testing.T) {
-	parser := New()
-	input := parser.GetInputChan()
-	input <- "testCalendars/notFound.ics"
-	parser.Wait()
-
-	parseErrors, err := parser.GetErrors()
-
-	if err != nil {
-		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
-	}
+	reader := readingFromFile("testCalendars/notFound.ics")
+	parser := createParser(reader)
+	calendar := New()
+	parser.read(calendar)
+	parseErrors := parser.getErrors()
 	if len(parseErrors) != 1 {
 		t.Errorf("Expected 1 error, found %d in :\n  %#v", len(parseErrors), parseErrors)
 	}
-
 }
 
-func TestParsingNotExistingAndExistingCalendars(t *testing.T) {
-	parser := New()
-	input := parser.GetInputChan()
-	input <- "testCalendars/3eventsNoAttendee.ics"
-	input <- "testCalendars/notFound.ics"
-	parser.Wait()
-
-	parseErrors, err := parser.GetErrors()
-
-	if err != nil {
-		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
-	}
-	if len(parseErrors) != 1 {
-		t.Errorf("Expected 1 error, found %d in :\n  %#v", len(parseErrors), parseErrors)
-	}
-
-	calendars, errCal := parser.GetCalendars()
-
-	if errCal != nil {
-		t.Errorf("Failed to get calendars ( %s )", errCal)
-	}
-
-	if len(calendars) != 1 {
-		t.Errorf("Expected 1 calendar, found %d calendars", len(calendars))
-	}
-
-}
 func TestParsingWrongCalendarUrls(t *testing.T) {
-	parser := New()
-	input := parser.GetInputChan()
-	input <- "http://localhost/goTestFails"
-	parser.Wait()
+	reader := readingFromURL("http://localhost/goTestFails")
+	parser := createParser(reader)
+	calendar := New()
+	err := parser.read(calendar)
+	parseErrors := parser.getErrors()
 
-	parseErrors, err := parser.GetErrors()
-
-	if err != nil {
-		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
+	if err == nil {
+		t.Errorf("Expected 1 error, got none.\n")
 	}
+
 	if len(parseErrors) != 1 {
 		t.Errorf("Expected 1 error, found %d in :\n  %#v", len(parseErrors), parseErrors)
 	}
 
-	calendars, errCal := parser.GetCalendars()
-
-	if errCal != nil {
-		t.Errorf("Failed to get calendars ( %s )", errCal)
+	if len(calendar.Events) != 0 {
+		t.Errorf("Expected a calendar with 0 events, found %d events", len(calendar.Events))
 	}
-
-	if len(calendars) != 0 {
-		t.Errorf("Expected 0 calendar, found %d calendars", len(calendars))
-	}
-}
-
-func TestCreatingTempDir(t *testing.T) {
-	FilePath = "testingTempDir/"
-	parser := New()
-	input := parser.GetInputChan()
-	input <- "https://www.google.com/calendar/ical/yordanpulov%40gmail.com/private-81525ac0eb14cdc2e858c15e1b296a1c/basic.ics"
-	parser.Wait()
-	_, err := os.Stat(FilePath)
-	if err != nil {
-		t.Errorf("Failed to create %s", FilePath)
-	}
-	// remove the new dir
-	os.Remove(FilePath)
-	// return the var to default
-	FilePath = "tmp/"
 }
 
 func TestCalendarInfo(t *testing.T) {
-	parser := New()
-	input := parser.GetInputChan()
-	input <- "testCalendars/2eventsCal.ics"
-	parser.Wait()
+	reader := readingFromFile("testCalendars/2eventsCal.ics")
+	parser := createParser(reader)
+	calendar := New()
+	parser.read(calendar)
+	parseErrors := parser.getErrors()
 
-	parseErrors, err := parser.GetErrors()
-
-	if err != nil {
-		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
-	}
 	if len(parseErrors) != 0 {
 		t.Errorf("Expected 0 error, found %d in :\n %#v", len(parseErrors), parseErrors)
 	}
 
-	calendars, errCal := parser.GetCalendars()
-
-	if errCal != nil {
-		t.Errorf("Failed to get calendars ( %s )", errCal)
+	if calendar.Name != "2 Events Cal" {
+		t.Errorf("Expected name '%s' calendar, got '%s' calendars", "2 Events Cal", calendar.Name)
 	}
 
-	if len(calendars) != 1 {
-		t.Errorf("Expected 1 calendar, found %d calendars", len(calendars))
-		return
+	if calendar.Description != "The cal has 2 events(1st with attendees and second without)" {
+		t.Errorf("Expected description '%s' calendar, got '%s' calendars", "The cal has 2 events(1st with attendees and second without)", calendar.Description)
 	}
 
-	calendar := calendars[0]
-
-	if calendar.GetName() != "2 Events Cal" {
-		t.Errorf("Expected name '%s' calendar, got '%s' calendars", "2 Events Cal", calendar.GetName())
+	if calendar.Version != 2.0 {
+		t.Errorf("Expected version %v calendar, got %v calendars", 2.0, calendar.Version)
 	}
 
-	if calendar.GetDesc() != "The cal has 2 events(1st with attendees and second without)" {
-		t.Errorf("Expected description '%s' calendar, got '%s' calendars", "The cal has 2 events(1st with attendees and second without)", calendar.GetDesc())
-	}
-
-	if calendar.GetVersion() != 2.0 {
-		t.Errorf("Expected version %v calendar, got %v calendars", 2.0, calendar.GetVersion())
-	}
-
-	events := calendar.GetEvents()
+	events := calendar.Events
 	if len(events) != 2 {
 		t.Errorf("Expected %d events in calendar, got %d events", 2, len(events))
 	}
 
-	eventsByDates := calendar.GetEventsByDates()
+	eventsByDates := calendar.EventsByDate
 	if len(eventsByDates) != 2 {
 		t.Errorf("Expected %d events by date in calendar, got %d events", 2, len(eventsByDates))
 	}
 
 	geometryExamIcsFormat, errICS := time.Parse(IcsFormat, "20140616T060000Z")
-	if err != nil {
+	if errICS != nil {
 		t.Errorf("(ics time format) Unexpected error %s", errICS)
 	}
 
 	geometryExamYmdHis, errYMD := time.Parse(YmdHis, "2014-06-16 06:00:00")
-	if err != nil {
+	if errYMD != nil {
 		t.Errorf("(YmdHis time format) Unexpected error %s", errYMD)
 	}
 	eventsByDate, err := calendar.GetEventsByDate(geometryExamIcsFormat)
@@ -293,32 +123,15 @@ func TestCalendarInfo(t *testing.T) {
 }
 
 func TestCalendarEvents(t *testing.T) {
-	parser := New()
-	input := parser.GetInputChan()
-	input <- "testCalendars/2eventsCal.ics"
-	parser.Wait()
-
-	parseErrors, err := parser.GetErrors()
-
-	if err != nil {
-		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
-	}
+	reader := readingFromFile("testCalendars/2eventsCal.ics")
+	parser := createParser(reader)
+	calendar := New()
+	parser.read(calendar)
+	parseErrors := parser.getErrors()
 	if len(parseErrors) != 0 {
 		t.Errorf("Expected 0 error, found %d in :\n  %#v", len(parseErrors), parseErrors)
 	}
 
-	calendars, errCal := parser.GetCalendars()
-
-	if errCal != nil {
-		t.Errorf("Failed to get calendars ( %s )", errCal)
-	}
-
-	if len(calendars) != 1 {
-		t.Errorf("Expected 1 calendar, found %d calendars", len(calendars))
-		return
-	}
-
-	calendar := calendars[0]
 	event, err := calendar.GetEventByImportedID("btb9tnpcnd4ng9rn31rdo0irn8@google.com")
 	if err != nil {
 		t.Errorf("Failed to get event by id with error %s", err)
@@ -339,64 +152,64 @@ func TestCalendarEvents(t *testing.T) {
 	attendeesCount := 3
 
 	org := new(Attendee)
-	org.SetName("r.chupetlovska@gmail.com")
-	org.SetEmail("r.chupetlovska@gmail.com")
+	org.Name = ("r.chupetlovska@gmail.com")
+	org.Email = ("r.chupetlovska@gmail.com")
 
-	if event.GetStart() != start {
-		t.Errorf("Expected start %s, found %s", start, event.GetStart())
+	if event.Start != start {
+		t.Errorf("Expected start %s, found %s", start, event.Start)
 	}
 
-	if event.GetEnd() != end {
-		t.Errorf("Expected end %s, found %s", end, event.GetEnd())
+	if event.End != end {
+		t.Errorf("Expected end %s, found %s", end, event.End)
 	}
 
-	if event.GetCreated() != created {
-		t.Errorf("Expected created %s, found %s", created, event.GetCreated())
+	if event.Created != created {
+		t.Errorf("Expected created %s, found %s", created, event.Created)
 	}
 
-	if event.GetLastModified() != modified {
-		t.Errorf("Expected modified %s, found %s", modified, event.GetLastModified())
+	if event.Modified != modified {
+		t.Errorf("Expected modified %s, found %s", modified, event.Modified)
 	}
 
-	if event.GetLocation() != location {
-		t.Errorf("Expected location %s, found %s", location, event.GetLocation())
+	if event.Location != location {
+		t.Errorf("Expected location %s, found %s", location, event.Location)
 	}
 
-	if event.GetGeo().latStr != geo.latStr {
-		t.Errorf("Expected geo %s, found %s", geo.latStr, event.GetGeo().latStr)
+	if event.Geo.latStr != geo.latStr {
+		t.Errorf("Expected geo %s, found %s", geo.latStr, event.Geo.latStr)
 	}
 
-	if event.GetGeo().longStr != geo.longStr {
-		t.Errorf("Expected geo %s, found %s", geo.longStr, event.GetGeo().longStr)
+	if event.Geo.longStr != geo.longStr {
+		t.Errorf("Expected geo %s, found %s", geo.longStr, event.Geo.longStr)
 	}
 
-	if event.GetDescription() != desc {
-		t.Errorf("Expected description %s, found %s", desc, event.GetDescription())
+	if event.Description != desc {
+		t.Errorf("Expected description %s, found %s", desc, event.Description)
 	}
 
-	if event.GetSequence() != seq {
-		t.Errorf("Expected sequence %s, found %s", seq, event.GetSequence())
+	if event.Sequence != seq {
+		t.Errorf("Expected sequence %s, found %s", seq, event.Sequence)
 	}
 
-	if event.GetStatus() != status {
-		t.Errorf("Expected status %s, found %s", status, event.GetStatus())
+	if event.Status != status {
+		t.Errorf("Expected status %s, found %s", status, event.Status)
 	}
 
-	if event.GetSummary() != summary {
-		t.Errorf("Expected status %s, found %s", summary, event.GetSummary())
+	if event.Summary != summary {
+		t.Errorf("Expected status %s, found %s", summary, event.Summary)
 	}
 
-	if event.GetRRule() != rrule {
-		t.Errorf("Expected rrule %s, found %s", rrule, event.GetRRule())
+	if event.Rrule != rrule {
+		t.Errorf("Expected rrule %s, found %s", rrule, event.Rrule)
 	}
 
-	if len(event.GetAttendees()) != attendeesCount {
-		t.Errorf("Expected attendeesCount %s, found %s", attendeesCount, len(event.GetAttendees()))
+	if len(event.Attendees) != attendeesCount {
+		t.Errorf("Expected attendeesCount %d, found %d", attendeesCount, len(event.Attendees))
 	}
 
-	eventOrg := event.GetOrganizer()
+	eventOrg := event.Organizer
 	if *eventOrg != *org {
-		t.Errorf("Expected organizer %s, found %s", org, event.GetOrganizer())
+		t.Errorf("Expected organizer %s, found %s", org, event.Organizer)
 	}
 
 	// SECOND EVENT WITHOUT ATTENDEES AND ORGANIZER
@@ -408,51 +221,35 @@ func TestCalendarEvents(t *testing.T) {
 		t.Errorf("Failed to get event by id with error %s", errNoAttendees)
 	}
 
-	if len(eventNoAttendees.GetAttendees()) != attendeesCount {
-		t.Errorf("Expected attendeesCount %s, found %s", attendeesCount, len(event.GetAttendees()))
+	if len(eventNoAttendees.Attendees) != attendeesCount {
+		t.Errorf("Expected attendeesCount %d, found %d", attendeesCount, len(event.Attendees))
 	}
 
-	if eventNoAttendees.GetOrganizer() != nil {
-		t.Errorf("Expected organizer %s, found %s", org, eventNoAttendees.GetOrganizer())
+	if eventNoAttendees.Organizer != nil {
+		t.Errorf("Expected organizer %s, found %s", org, eventNoAttendees.Organizer)
 	}
 }
 
 func TestCalendarEventAttendees(t *testing.T) {
-	parser := New()
-	input := parser.GetInputChan()
-	input <- "testCalendars/2eventsCal.ics"
-	parser.Wait()
+	reader := readingFromFile("testCalendars/2eventsCal.ics")
+	parser := createParser(reader)
+	calendar := New()
+	parser.read(calendar)
+	parseErrors := parser.getErrors()
 
-	parseErrors, err := parser.GetErrors()
-
-	if err != nil {
-		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
-	}
 	if len(parseErrors) != 0 {
 		t.Errorf("Expected 0 error, found %d in :\n  %#v", len(parseErrors), parseErrors)
 	}
 
-	calendars, errCal := parser.GetCalendars()
-
-	if errCal != nil {
-		t.Errorf("Failed to get calendars ( %s )", errCal)
-	}
-
-	if len(calendars) != 1 {
-		t.Errorf("Expected 1 calendar, found %d calendars", len(calendars))
-		return
-	}
-
-	calendar := calendars[0]
 	event, err := calendar.GetEventByImportedID("btb9tnpcnd4ng9rn31rdo0irn8@google.com")
 	if err != nil {
 		t.Errorf("Failed to get event by id with error %s", err)
 	}
-	attendees := event.GetAttendees()
+	attendees := event.Attendees
 	attendeesCount := 3
 
 	if len(attendees) != attendeesCount {
-		t.Errorf("Expected attendeesCount %s, found %s", attendeesCount, len(attendees))
+		t.Errorf("Expected attendeesCount %d, found %d", attendeesCount, len(attendees))
 		return
 	}
 
@@ -461,75 +258,63 @@ func TestCalendarEventAttendees(t *testing.T) {
 	travis := attendees[2]
 
 	// check name
-	if john.GetName() != "John Smith" {
-		t.Errorf("Expected attendee name %s, found %s", "John Smith", john.GetName())
+	if john.Name != "John Smith" {
+		t.Errorf("Expected attendee name %s, found %s", "John Smith", john.Name)
 	}
-	if sue.GetName() != "Sue Zimmermann" {
-		t.Errorf("Expected attendee name %s, found %s", "Sue Zimmermann", sue.GetName())
+	if sue.Name != "Sue Zimmermann" {
+		t.Errorf("Expected attendee name %s, found %s", "Sue Zimmermann", sue.Name)
 	}
-	if travis.GetName() != "Travis M. Vollmer" {
-		t.Errorf("Expected attendee name %s, found %s", "Travis M. Vollmer", travis.GetName())
+	if travis.Name != "Travis M. Vollmer" {
+		t.Errorf("Expected attendee name %s, found %s", "Travis M. Vollmer", travis.Name)
 	}
 
 	// check email
-	if john.GetEmail() != "j.smith@gmail.com" {
-		t.Errorf("Expected attendee email %s, found %s", "j.smith@gmail.com", john.GetEmail())
+	if john.Email != "j.smith@gmail.com" {
+		t.Errorf("Expected attendee email %s, found %s", "j.smith@gmail.com", john.Email)
 	}
-	if sue.GetEmail() != "SueMZimmermann@dayrep.com" {
-		t.Errorf("Expected attendee email %s, found %s", "SueMZimmermann@dayrep.com", sue.GetEmail())
+	if sue.Email != "SueMZimmermann@dayrep.com" {
+		t.Errorf("Expected attendee email %s, found %s", "SueMZimmermann@dayrep.com", sue.Email)
 	}
-	if travis.GetEmail() != "travis@dayrep.com" {
-		t.Errorf("Expected attendee email %s, found %s", "travis@dayrep.com", travis.GetEmail())
+	if travis.Email != "travis@dayrep.com" {
+		t.Errorf("Expected attendee email %s, found %s", "travis@dayrep.com", travis.Email)
 	}
 
 	// check status
-	if john.GetStatus() != "ACCEPTED" {
-		t.Errorf("Expected attendee status %s, found %s", "ACCEPTED", john.GetStatus())
+	if john.Status != "ACCEPTED" {
+		t.Errorf("Expected attendee status %s, found %s", "ACCEPTED", john.Status)
 	}
-	if sue.GetStatus() != "NEEDS-ACTION" {
-		t.Errorf("Expected attendee status %s, found %s", "NEEDS-ACTION", sue.GetStatus())
+	if sue.Status != "NEEDS-ACTION" {
+		t.Errorf("Expected attendee status %s, found %s", "NEEDS-ACTION", sue.Status)
 	}
-	if travis.GetStatus() != "NEEDS-ACTION" {
-		t.Errorf("Expected attendee status %s, found %s", "NEEDS-ACTION", travis.GetStatus())
+	if travis.Status != "NEEDS-ACTION" {
+		t.Errorf("Expected attendee status %s, found %s", "NEEDS-ACTION", travis.Status)
 	}
 
 	// check role
-	if john.GetRole() != "REQ-PARTICIPANT" {
-		t.Errorf("Expected attendee status %s, found %s", "REQ-PARTICIPANT", john.GetRole())
+	if john.Role != "REQ-PARTICIPANT" {
+		t.Errorf("Expected attendee status %s, found %s", "REQ-PARTICIPANT", john.Role)
 	}
-	if sue.GetRole() != "REQ-PARTICIPANT" {
-		t.Errorf("Expected attendee status %s, found %s", "REQ-PARTICIPANT", sue.GetRole())
+	if sue.Role != "REQ-PARTICIPANT" {
+		t.Errorf("Expected attendee status %s, found %s", "REQ-PARTICIPANT", sue.Role)
 	}
-	if travis.GetRole() != "REQ-PARTICIPANT" {
-		t.Errorf("Expected attendee status %s, found %s", "REQ-PARTICIPANT", travis.GetRole())
+	if travis.Role != "REQ-PARTICIPANT" {
+		t.Errorf("Expected attendee status %s, found %s", "REQ-PARTICIPANT", travis.Role)
 	}
 }
 
 func TestCalendarMultidayEvent(t *testing.T) {
-	parser := New()
-	input := parser.GetInputChan()
-	input <- "testCalendars/multiday.ics"
-	parser.Wait()
+	reader := readingFromFile("testCalendars/multiday.ics")
+	parser := createParser(reader)
+	calendar := New()
+	err := parser.read(calendar)
+	parseErrors := parser.getErrors()
 
-	parseErrors, err := parser.GetErrors()
 	if err != nil {
 		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
 	}
 	if len(parseErrors) != 0 {
 		t.Errorf("Expected 0 error, found %d in :\n  %#v", len(parseErrors), parseErrors)
 	}
-
-	calendars, errCal := parser.GetCalendars()
-	if errCal != nil {
-		t.Errorf("Failed to get calendars ( %s )", errCal)
-	}
-
-	if len(calendars) != 1 {
-		t.Errorf("Expected 1 calendar, found %d calendars", len(calendars))
-		return
-	}
-
-	calendar := calendars[0]
 
 	// Test a day before the start day
 	events, err := calendar.GetEventsByDate(time.Date(2016, 8, 31, 0, 0, 0, 0, time.UTC))

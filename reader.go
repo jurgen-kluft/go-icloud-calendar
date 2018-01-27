@@ -2,7 +2,10 @@ package icalendar
 
 import (
 	"bytes"
+	"fmt"
+	"io/ioutil"
 	"net/http"
+	"strings"
 )
 
 // Reader can be any location to get ICS data (URL, File, ...)
@@ -27,11 +30,32 @@ func (r *readFromURL) Read() (string, error) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(response.Body)
 	textualContent := buf.String()
-	//return the file that contains the info
-	return textualContent, nil
+
+	if strings.HasPrefix(textualContent, "BEGIN:VCALENDAR") {
+		//return the file that contains the info
+		return textualContent, nil
+	}
+	return "", fmt.Errorf("Content has wrong format")
 }
 
 // ReadingFromURL returns an instance that can download content from URL
-func ReadingFromURL(url string) Reader {
+func readingFromURL(url string) Reader {
 	return &readFromURL{url: url}
+}
+
+type readFromFile struct {
+	filepath string
+}
+
+func (r *readFromFile) Read() (string, error) {
+	calBytes, err := ioutil.ReadFile(r.filepath)
+	if err != nil {
+		return "", fmt.Errorf("Failed to read calendar file ( %s )", err)
+	}
+	return string(calBytes), nil
+}
+
+// ReadingFromFile returns a Reader instance that will read from file 'filepath'
+func readingFromFile(filepath string) Reader {
+	return &readFromFile{filepath: filepath}
 }
