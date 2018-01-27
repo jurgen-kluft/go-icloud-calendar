@@ -15,7 +15,7 @@ type Attendee struct {
 
 // NewAttendee will create a new Attendee instance
 func NewAttendee() *Attendee {
-	a := new(Attendee)
+	a := &Attendee{}
 	return a
 }
 

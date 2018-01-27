@@ -32,7 +32,7 @@ type Event struct {
 
 // NewEvent will create a new instance of Event
 func NewEvent() *Event {
-	e := new(Event)
+	e := &Event{}
 	e.Attendees = []*Attendee{}
 	return e
 }

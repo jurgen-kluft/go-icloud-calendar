@@ -1,6 +1,7 @@
 package icalendar
 
 import (
+	"bytes"
 	"net/http"
 )
 
@@ -23,12 +24,14 @@ func (r *readFromURL) Read() (string, error) {
 	defer response.Body.Close()
 
 	// copy the response from response in a string
-	textualContent := string(response.Body)
-
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(response.Body)
+	textualContent := buf.String()
 	//return the file that contains the info
 	return textualContent, nil
 }
 
+// ReadingFromURL returns an instance that can download content from URL
 func ReadingFromURL(url string) Reader {
 	return &readFromURL{url: url}
 }
