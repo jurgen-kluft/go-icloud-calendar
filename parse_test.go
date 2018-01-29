@@ -104,18 +104,12 @@ func TestCalendarInfo(t *testing.T) {
 	if errYMD != nil {
 		t.Errorf("(YmdHis time format) Unexpected error %s", errYMD)
 	}
-	eventsByDate, err := calendar.GetEventsByDate(geometryExamIcsFormat)
-	if err != nil {
-		t.Errorf("(ics time format) Unexpected error %s", err)
-	}
+	eventsByDate := calendar.GetEventsByDate(geometryExamIcsFormat)
 	if len(eventsByDate) != 1 {
 		t.Errorf("(ics time format) Expected %d events in calendar for the date 2014-06-16, got %d events", 1, len(eventsByDate))
 	}
 
-	eventsByDate, err = calendar.GetEventsByDate(geometryExamYmdHis)
-	if err != nil {
-		t.Errorf("(YmdHis time format) Unexpected error %s", err)
-	}
+	eventsByDate = calendar.GetEventsByDate(geometryExamYmdHis)
 	if len(eventsByDate) != 1 {
 		t.Errorf("(YmdHis time format) Expected %d events in calendar for the date 2014-06-16, got %d events", 1, len(eventsByDate))
 	}
@@ -317,32 +311,20 @@ func TestCalendarMultidayEvent(t *testing.T) {
 	}
 
 	// Test a day before the start day
-	events, err := calendar.GetEventsByDate(time.Date(2016, 8, 31, 0, 0, 0, 0, time.UTC))
-	if err == nil {
-		t.Errorf("Expected no event before the start day, got %d", len(events))
-	}
+	events := calendar.GetEventsByDate(time.Date(2016, 8, 31, 0, 0, 0, 0, time.UTC))
 
 	// Test exact start day
-	events, err = calendar.GetEventsByDate(time.Date(2016, 9, 1, 0, 0, 0, 0, time.UTC))
-	if err != nil {
-		t.Errorf("Failed to get event: %s", err.Error())
-	}
+	events = calendar.GetEventsByDate(time.Date(2016, 9, 1, 0, 0, 0, 0, time.UTC))
 	if len(events) != 1 {
 		t.Errorf("Expected 1 event on the start day, got %d", len(events))
 	}
 
 	// Test a random day between start and end date
-	events, err = calendar.GetEventsByDate(time.Date(2016, 10, 1, 0, 0, 0, 0, time.UTC))
-	if err != nil {
-		t.Errorf("Failed to get event: %s", err.Error())
-	}
+	events = calendar.GetEventsByDate(time.Date(2016, 10, 1, 0, 0, 0, 0, time.UTC))
 	if len(events) != 1 {
 		t.Errorf("Expected 1 event between start and end, got %d", len(events))
 	}
 
 	// Test a day after the end day
-	events, err = calendar.GetEventsByDate(time.Date(2016, 11, 1, 0, 0, 0, 0, time.UTC))
-	if err == nil {
-		t.Errorf("Expected no event after the end day, got %d", len(events))
-	}
+	events = calendar.GetEventsByDate(time.Date(2016, 11, 1, 0, 0, 0, 0, time.UTC))
 }

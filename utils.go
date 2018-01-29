@@ -1,19 +1,9 @@
 package icalendar
 
 import (
-	"os"
 	"regexp"
 	"strings"
 )
-
-// RepeatRuleApply is true , the rrule will create new objects for the repeated events
-var RepeatRuleApply bool
-
-// MaxRepeats max of the rrule repeat for single event
-var MaxRepeats int
-
-//  unixtimestamp
-const uts = "1136239445"
 
 // IcsFormat date time format
 const IcsFormat = "20060102T150405Z"
@@ -35,40 +25,20 @@ func trimField(field, cutset string) string {
 	return strings.TrimRight(cutsetRem, "\r\n")
 }
 
-//  checks if file exists
-func fileExists(fileName string) bool {
-	_, err := os.Stat(fileName)
-	return err == nil
+var mapDayNameToIcsName = map[string]string {
+	"Mon": "MO",
+	"Tue": "TU",
+	"Wed": "WE",
+	"Thu": "TH",
+	"Fri": "FR",
+	"Sat": "ST",
+	"Sun": "SU",
 }
 
-func parseDayNameToIcsName(day string) string {
-	var dow string
-	switch day {
-	case "Mon":
-		dow = "MO"
-		break
-	case "Tue":
-		dow = "TU"
-		break
-	case "Wed":
-		dow = "WE"
-		break
-	case "Thu":
-		dow = "TH"
-		break
-	case "Fri":
-		dow = "FR"
-		break
-	case "Sat":
-		dow = "ST"
-		break
-	case "Sun":
-		dow = "SU"
-		break
-	default:
-		// fmt.Println("DEFAULT :", start.Format("Mon"))
+func getIcsNameFromDayName(day string) string {
+	dow, exists := mapDayNameToIcsName[day]
+	if !exists {
 		dow = ""
-		break
 	}
 	return dow
 }

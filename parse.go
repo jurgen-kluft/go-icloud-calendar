@@ -10,8 +10,8 @@ import (
 
 type parser struct {
 	reader          Reader
-	repeatRuleApply bool
-	maxRepeats      int
+	repeatRuleApply bool   // RepeatRuleApply is true , the rrule will create new objects for the repeated events
+	maxRepeats      int    // MaxRepeats max of the rrule repeat for single event
 	errorsOccured   []error
 	parsedEvents    []*Event
 }
@@ -49,7 +49,6 @@ func (p *parser) read(cal *Calendar) error {
 	return fmt.Errorf("Reading calendar content has errors")
 }
 
-// returns the array with the errors occurred while parsing the events
 func (p *parser) getErrors() []error {
 	return p.errorsOccured
 }
@@ -60,18 +59,16 @@ func (p *parser) parseContent(ical *Calendar, content string) {
 	// split the data into calendar info and events data
 	eventsData, calInfo := explodeICal(content)
 
-	// fill the calendar fields
+	// set the calendar properties
 	ical.Name = (p.parseICalName(calInfo))
 	ical.Description = (p.parseICalDesc(calInfo))
 	ical.Version = (p.parseICalVersion(calInfo))
 	ical.Timezone = (p.parseICalTimezone(calInfo))
 
-	// parse the events and add them to ical
+	// parse all events and add them to the calendar
 	p.parseEvents(ical, eventsData)
-
 }
 
-// explodes the ICal content to array of events and calendar info
 func explodeICal(content string) ([]string, string) {
 	reEvents, _ := regexp.Compile(`(BEGIN:VEVENT(.*\n)*?END:VEVENT\r?\n)`)
 	allEvents := reEvents.FindAllString(content, len(content))
@@ -79,21 +76,18 @@ func explodeICal(content string) ([]string, string) {
 	return allEvents, calInfo
 }
 
-// parses the iCal Name
 func (p *parser) parseICalName(content string) string {
 	re, _ := regexp.Compile(`X-WR-CALNAME:.*?\n`)
 	result := re.FindString(content)
 	return trimField(result, "X-WR-CALNAME:")
 }
 
-// parses the iCal description
 func (p *parser) parseICalDesc(content string) string {
 	re, _ := regexp.Compile(`X-WR-CALDESC:.*?\n`)
 	result := re.FindString(content)
 	return trimField(result, "X-WR-CALDESC:")
 }
 
-// parses the iCal version
 func (p *parser) parseICalVersion(content string) float64 {
 	re, _ := regexp.Compile(`VERSION:.*?\n`)
 	result := re.FindString(content)
@@ -102,7 +96,6 @@ func (p *parser) parseICalVersion(content string) float64 {
 	return ver
 }
 
-// parses the iCal timezone
 func (p *parser) parseICalTimezone(content string) time.Location {
 	re, _ := regexp.Compile(`X-WR-TIMEZONE:.*?\n`)
 	result := re.FindString(content)
@@ -120,9 +113,8 @@ func (p *parser) parseICalTimezone(content string) time.Location {
 	return *loc
 }
 
-// ======================== EVENTS PARSING ===================
+// EVENTS PARSING
 
-// parses the iCal events Data
 func (p *parser) parseEvents(cal *Calendar, eventsData []string) {
 	for _, eventData := range eventsData {
 		event := NewEvent()
@@ -181,7 +173,7 @@ func (p *parser) parseEvents(cal *Calendar, eventsData []string) {
 			countString := trimField(reCount.FindString(event.Rrule), `(COUNT=|;)`)
 			count, _ := strconv.Atoi(countString)
 			if count == 0 {
-				count = MaxRepeats
+				count = p.maxRepeats
 			}
 
 			// freq field
@@ -235,13 +227,11 @@ func (p *parser) parseEvents(cal *Calendar, eventsData []string) {
 				weekDaysStart := freqDateStart
 				weekDaysEnd := freqDateEnd
 
-				// check repeating by month
+				// is this repeating by month?
 				if bymonth == "" || strings.Contains(bymonth, weekDaysStart.Format("1")) {
-
 					if byday != "" {
-						// loops the weekdays
 						for i := 0; i < 7; i++ {
-							day := parseDayNameToIcsName(weekDaysStart.Format("Mon"))
+							day := getIcsNameFromDayName(weekDaysStart.Format("Mon"))
 							if strings.Contains(byday, day) && weekDaysStart != start {
 								current++
 								count--
@@ -259,7 +249,7 @@ func (p *parser) parseEvents(cal *Calendar, eventsData []string) {
 							weekDaysEnd = weekDaysEnd.AddDate(0, 0, 1)
 						}
 					} else {
-						//  we dont have loop by day so we put it on the same day
+						//  the same day
 						if weekDaysStart != start {
 							current++
 							count--
@@ -279,7 +269,7 @@ func (p *parser) parseEvents(cal *Calendar, eventsData []string) {
 
 				freqDateStart = freqDateStart.AddDate(years, months, days)
 				freqDateEnd = freqDateEnd.AddDate(years, months, days)
-				if current > MaxRepeats || count == 0 {
+				if current > p.maxRepeats || count == 0 {
 					break
 				}
 
@@ -292,42 +282,36 @@ func (p *parser) parseEvents(cal *Calendar, eventsData []string) {
 	}
 }
 
-// parses the event summary
 func (p *parser) parseEventSummary(eventData string) string {
 	re, _ := regexp.Compile(`SUMMARY:.*?\n`)
 	result := re.FindString(eventData)
 	return trimField(result, "SUMMARY:")
 }
 
-// parses the event status
 func (p *parser) parseEventStatus(eventData string) string {
 	re, _ := regexp.Compile(`STATUS:.*?\n`)
 	result := re.FindString(eventData)
 	return trimField(result, "STATUS:")
 }
 
-// parses the event description
 func (p *parser) parseEventDescription(eventData string) string {
 	re, _ := regexp.Compile(`DESCRIPTION:.*?\n(?:\s+.*?\n)*`)
 	result := re.FindString(eventData)
 	return trimField(strings.Replace(result, "\r\n ", "", -1), "DESCRIPTION:")
 }
 
-// parses the event id provided form google
 func (p *parser) parseEventID(eventData string) string {
 	re, _ := regexp.Compile(`UID:.*?\n`)
 	result := re.FindString(eventData)
 	return trimField(result, "UID:")
 }
 
-// parses the event class
 func (p *parser) parseEventClass(eventData string) string {
 	re, _ := regexp.Compile(`CLASS:.*?\n`)
 	result := re.FindString(eventData)
 	return trimField(result, "CLASS:")
 }
 
-// parses the event sequence
 func (p *parser) parseEventSequence(eventData string) int {
 	re, _ := regexp.Compile(`SEQUENCE:.*?\n`)
 	result := re.FindString(eventData)
@@ -335,7 +319,6 @@ func (p *parser) parseEventSequence(eventData string) int {
 	return sq
 }
 
-// parses the event created time
 func (p *parser) parseEventCreated(eventData string) time.Time {
 	re, _ := regexp.Compile(`CREATED:.*?\n`)
 	result := re.FindString(eventData)
@@ -344,7 +327,6 @@ func (p *parser) parseEventCreated(eventData string) time.Time {
 	return t
 }
 
-// parses the event modified time
 func (p *parser) parseEventModified(eventData string) time.Time {
 	re, _ := regexp.Compile(`LAST-MODIFIED:.*?\n`)
 	result := re.FindString(eventData)
@@ -353,7 +335,6 @@ func (p *parser) parseEventModified(eventData string) time.Time {
 	return t
 }
 
-// parses the event start time
 func (p *parser) parseEventStart(eventData string) time.Time {
 	reWholeDay, _ := regexp.Compile(`DTSTART;VALUE=DATE:.*?\n`)
 	re, _ := regexp.Compile(`DTSTART(;TZID=.*?){0,1}:.*?\n`)
@@ -379,7 +360,6 @@ func (p *parser) parseEventStart(eventData string) time.Time {
 	return t
 }
 
-// parses the event end time
 func (p *parser) parseEventEnd(eventData string) time.Time {
 	reWholeDay, _ := regexp.Compile(`DTEND;VALUE=DATE:.*?\n`)
 	re, _ := regexp.Compile(`DTEND(;TZID=.*?){0,1}:.*?\n`)
@@ -404,21 +384,18 @@ func (p *parser) parseEventEnd(eventData string) time.Time {
 
 }
 
-// parses the event RRULE (the repeater)
 func (p *parser) parseEventRRule(eventData string) string {
 	re, _ := regexp.Compile(`RRULE:.*?\n`)
 	result := re.FindString(eventData)
 	return trimField(result, "RRULE:")
 }
 
-// parses the event LOCATION
 func (p *parser) parseEventLocation(eventData string) string {
 	re, _ := regexp.Compile(`LOCATION:.*?\n`)
 	result := re.FindString(eventData)
 	return trimField(result, "LOCATION:")
 }
 
-// parses the event GEO
 func (p *parser) parseEventGeo(eventData string) *Geo {
 	re, _ := regexp.Compile(`GEO:.*?\n`)
 	result := re.FindString(eventData)
@@ -432,9 +409,8 @@ func (p *parser) parseEventGeo(eventData string) *Geo {
 	return NewGeo(values[0], values[1])
 }
 
-// ======================== ATTENDEE PARSING ===================
+// ATTENDEE PARSING
 
-// parses the event attendees
 func (p *parser) parseEventAttendees(eventData string) []*Attendee {
 	attendeesObj := []*Attendee{}
 	re, _ := regexp.Compile(`ATTENDEE(:|;)(.*?\r?\n)(\s.*?\r?\n)*`)
@@ -453,7 +429,6 @@ func (p *parser) parseEventAttendees(eventData string) []*Attendee {
 	return attendeesObj
 }
 
-// parses the event organizer
 func (p *parser) parseEventOrganizer(eventData string) *Attendee {
 
 	re, _ := regexp.Compile(`ORGANIZER(:|;)(.*?\r?\n)(\s.*?\r?\n)*`)
@@ -470,7 +445,6 @@ func (p *parser) parseEventOrganizer(eventData string) *Attendee {
 	return a
 }
 
-//  parse attendee properties
 func (p *parser) parseAttendee(attendeeData string) *Attendee {
 
 	a := NewAttendee()
@@ -482,14 +456,12 @@ func (p *parser) parseAttendee(attendeeData string) *Attendee {
 	return a
 }
 
-// parses the attendee email
 func (p *parser) parseAttendeeMail(attendeeData string) string {
 	re, _ := regexp.Compile(`mailto:.*?\n`)
 	result := re.FindString(attendeeData)
 	return trimField(result, "mailto:")
 }
 
-// parses the attendee status
 func (p *parser) parseAttendeeStatus(attendeeData string) string {
 	re, _ := regexp.Compile(`PARTSTAT=.*?;`)
 	result := re.FindString(attendeeData)
@@ -499,7 +471,6 @@ func (p *parser) parseAttendeeStatus(attendeeData string) string {
 	return trimField(result, `(PARTSTAT=|;)`)
 }
 
-// parses the attendee role
 func (p *parser) parseAttendeeRole(attendeeData string) string {
 	re, _ := regexp.Compile(`ROLE=.*?;`)
 	result := re.FindString(attendeeData)
@@ -510,7 +481,6 @@ func (p *parser) parseAttendeeRole(attendeeData string) string {
 	return trimField(result, `(ROLE=|;)`)
 }
 
-// parses the attendee Name
 func (p *parser) parseAttendeeName(attendeeData string) string {
 	re, _ := regexp.Compile(`CN=.*?;`)
 	result := re.FindString(attendeeData)
@@ -530,7 +500,6 @@ func (p *parser) parseOrganizerName(orgData string) string {
 	return trimField(result, `(CN=|:)`)
 }
 
-// parses the attendee type
 func (p *parser) parseAttendeeType(attendeeData string) string {
 	re, _ := regexp.Compile(`CUTYPE=.*?;`)
 	result := re.FindString(attendeeData)
