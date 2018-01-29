@@ -11,7 +11,7 @@ func TestLoadCalendar(t *testing.T) {
 	reader := readingFromFile("testCalendars/2eventsCal.ics")
 	parser := createParser(reader)
 
-	calendar := New()
+	calendar := newCalendar()
 	err := parser.read(calendar)
 
 	if err != nil {
@@ -34,7 +34,7 @@ func TestNewParser(t *testing.T) {
 func TestParsingNotExistingCalendar(t *testing.T) {
 	reader := readingFromFile("testCalendars/notFound.ics")
 	parser := createParser(reader)
-	calendar := New()
+	calendar := newCalendar()
 	parser.read(calendar)
 	parseErrors := parser.getErrors()
 	if len(parseErrors) != 1 {
@@ -45,7 +45,7 @@ func TestParsingNotExistingCalendar(t *testing.T) {
 func TestParsingWrongCalendarUrls(t *testing.T) {
 	reader := readingFromURL("http://localhost/goTestFails")
 	parser := createParser(reader)
-	calendar := New()
+	calendar := newCalendar()
 	err := parser.read(calendar)
 	parseErrors := parser.getErrors()
 
@@ -65,7 +65,7 @@ func TestParsingWrongCalendarUrls(t *testing.T) {
 func TestCalendarInfo(t *testing.T) {
 	reader := readingFromFile("testCalendars/2eventsCal.ics")
 	parser := createParser(reader)
-	calendar := New()
+	calendar := newCalendar()
 	parser.read(calendar)
 	parseErrors := parser.getErrors()
 
@@ -125,7 +125,7 @@ func TestCalendarInfo(t *testing.T) {
 func TestCalendarEvents(t *testing.T) {
 	reader := readingFromFile("testCalendars/2eventsCal.ics")
 	parser := createParser(reader)
-	calendar := New()
+	calendar := newCalendar()
 	parser.read(calendar)
 	parseErrors := parser.getErrors()
 	if len(parseErrors) != 0 {
@@ -233,7 +233,7 @@ func TestCalendarEvents(t *testing.T) {
 func TestCalendarEventAttendees(t *testing.T) {
 	reader := readingFromFile("testCalendars/2eventsCal.ics")
 	parser := createParser(reader)
-	calendar := New()
+	calendar := newCalendar()
 	parser.read(calendar)
 	parseErrors := parser.getErrors()
 
@@ -305,7 +305,7 @@ func TestCalendarEventAttendees(t *testing.T) {
 func TestCalendarMultidayEvent(t *testing.T) {
 	reader := readingFromFile("testCalendars/multiday.ics")
 	parser := createParser(reader)
-	calendar := New()
+	calendar := newCalendar()
 	err := parser.read(calendar)
 	parseErrors := parser.getErrors()
 

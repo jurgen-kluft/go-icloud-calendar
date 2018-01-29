@@ -10,7 +10,8 @@ import (
 type Calendar struct {
 	Name               string
 	Description        string
-	URL                string
+	reader             Reader
+	parser             *parser
 	Version            float64
 	Timezone           time.Location
 	Events             Events
@@ -34,14 +35,37 @@ func (events Events) Swap(i, j int) {
 	events[i], events[j] = events[j], events[i]
 }
 
-// New returns a new instance of a Calendar
-func New() *Calendar {
+// NewURLCalendar returns a new instance of a Calendar that has a URL source
+func newCalendar() *Calendar {
 	c := &Calendar{}
+	c.reader = nil
+	c.parser = nil
 	c.Events = make([]Event, 0, 8)
 	c.EventsByDate = make(map[string][]*Event)
 	c.EventsByID = make(map[string]*Event)
 	c.EventsByImportedID = make(map[string]*Event)
 	return c
+}
+
+func NewURLCalendar(URL string) *Calendar {
+	c := newCalendar()
+	c.reader = readingFromURL(URL)
+	c.parser = createParser(c.reader)
+	return c
+}
+
+func (c *Calendar) Load() error {
+	calendar := newCalendar()
+	err := c.parser.read(calendar)
+	if err == nil {
+		// Take content of loaded calendar
+		c.Events = calendar.Events
+		c.EventsByDate = calendar.EventsByDate
+		c.EventsByID = calendar.EventsByID
+		c.EventsByImportedID = calendar.EventsByImportedID
+	}
+
+	return err
 }
 
 // SetEvent add event to the calendar
@@ -98,14 +122,14 @@ func (c *Calendar) GetEventByImportedID(eventID string) (*Event, error) {
 }
 
 // GetEventsByDate get all events for specified date
-func (c *Calendar) GetEventsByDate(dateTime time.Time) ([]*Event, error) {
+func (c *Calendar) GetEventsByDate(dateTime time.Time) []*Event {
 	tz := c.Timezone
 	day := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, &tz)
 	events, ok := c.EventsByDate[day.Format(YmdHis)]
 	if ok {
-		return events, nil
+		return events
 	}
-	return nil, fmt.Errorf("There are no events for the day %s", day.Format(YmdHis))
+	return []*Event{}
 }
 
 // GetUpcomingEvents returns the next n-Events.
@@ -134,6 +158,5 @@ func (c *Calendar) String() string {
 	eventsCount := len(c.Events)
 	name := c.Name
 	desc := c.Description
-	url := c.URL
-	return fmt.Sprintf("Calendar %s about %s has %d events. Downloaded from %s .", name, desc, eventsCount, url)
+	return fmt.Sprintf("Calendar %s about %s has %d events.", name, desc, eventsCount)
 }
