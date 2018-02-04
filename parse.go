@@ -10,8 +10,8 @@ import (
 
 type parser struct {
 	reader          Reader
-	repeatRuleApply bool   // RepeatRuleApply is true , the rrule will create new objects for the repeated events
-	maxRepeats      int    // MaxRepeats max of the rrule repeat for single event
+	repeatRuleApply bool // RepeatRuleApply is true , the rrule will create new objects for the repeated events
+	maxRepeats      int  // MaxRepeats max of the rrule repeat for single event
 	errorsOccured   []error
 	parsedEvents    []*Event
 }

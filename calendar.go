@@ -56,9 +56,17 @@ func NewURLCalendar(URL string) *Calendar {
 
 func (c *Calendar) Load() error {
 	calendar := newCalendar()
+	calendar.parser = c.parser
+	calendar.reader = c.reader
 	err := c.parser.read(calendar)
 	if err == nil {
 		// Take content of loaded calendar
+		c.Name = calendar.Name
+		c.Description = calendar.Description
+		c.reader = calendar.reader
+		c.parser = calendar.parser
+		c.Version = calendar.Version
+		c.Timezone = calendar.Timezone
 		c.Events = calendar.Events
 		c.EventsByDate = calendar.EventsByDate
 		c.EventsByID = calendar.EventsByID
