@@ -54,6 +54,13 @@ func NewURLCalendar(URL string) *Calendar {
 	return c
 }
 
+func NewFileCalendar(filepath string) *Calendar {
+	c := newCalendar()
+	c.reader = readingFromFile(filepath)
+	c.parser = createParser(c.reader)
+	return c
+}
+
 func (c *Calendar) Load() error {
 	calendar := newCalendar()
 	calendar.parser = c.parser
