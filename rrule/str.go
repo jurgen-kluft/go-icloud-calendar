@@ -57,7 +57,7 @@ func strToFreq(str string) (Frequency, error) {
 	return result, nil
 }
 
-func (wday Weekday) String() string {
+func (wday RWeekday) String() string {
 	s := [...]string{"MO", "TU", "WE", "TH", "FR", "SA", "SU"}[wday.weekday]
 	if wday.n == 0 {
 		return s
@@ -65,30 +65,30 @@ func (wday Weekday) String() string {
 	return fmt.Sprintf("%+d%s", wday.n, s)
 }
 
-func strToWeekday(str string) (Weekday, error) {
+func strToWeekday(str string) (RWeekday, error) {
 	if len(str) < 2 {
-		return Weekday{}, errors.New("undefined weekday: " + str)
+		return RWeekday{}, errors.New("undefined weekday: " + str)
 	}
-	weekMap := map[string]Weekday{
+	weekMap := map[string]RWeekday{
 		"MO": MO, "TU": TU, "WE": WE, "TH": TH,
 		"FR": FR, "SA": SA, "SU": SU}
 	result, ok := weekMap[str[len(str)-2:]]
 	if !ok {
-		return Weekday{}, errors.New("undefined weekday: " + str)
+		return RWeekday{}, errors.New("undefined weekday: " + str)
 	}
 	if len(str) > 2 {
 		n, e := strconv.Atoi(str[:len(str)-2])
 		if e != nil {
-			return Weekday{}, e
+			return RWeekday{}, e
 		}
 		result.n = n
 	}
 	return result, nil
 }
 
-func strToWeekdays(value string) ([]Weekday, error) {
+func strToWeekdays(value string) ([]RWeekday, error) {
 	contents := strings.Split(value, ",")
-	result := make([]Weekday, len(contents))
+	result := make([]RWeekday, len(contents))
 	var e error
 	for i, s := range contents {
 		result[i], e = strToWeekday(s)

@@ -51,10 +51,10 @@ const (
 	SECONDLY
 )
 
-// Weekday specifying the nth weekday.
+// RWeekday specifying the nth weekday.
 // Field N could be positive or negative (like MO(+2) or MO(-3).
 // Not specifying N (0) is the same as specifying +1.
-type Weekday struct {
+type RWeekday struct {
 	weekday int
 	n       int
 }
@@ -62,29 +62,29 @@ type Weekday struct {
 // Nth return the nth weekday
 // __call__ - Cannot call the object directly,
 // do it through e.g. TH.nth(-1) instead,
-func (wday *Weekday) Nth(n int) Weekday {
-	return Weekday{wday.weekday, n}
+func (wday *RWeekday) Nth(n int) RWeekday {
+	return RWeekday{wday.weekday, n}
 }
 
 // N returns index of the week, e.g. for 3MO, N() will return 3
-func (wday *Weekday) N() int {
+func (wday *RWeekday) N() int {
 	return wday.n
 }
 
 // Day returns index of the day in a week (0 for MO, 6 for SU)
-func (wday *Weekday) Day() int {
+func (wday *RWeekday) Day() int {
 	return wday.weekday
 }
 
 // Weekdays
 var (
-	MO = Weekday{weekday: 0}
-	TU = Weekday{weekday: 1}
-	WE = Weekday{weekday: 2}
-	TH = Weekday{weekday: 3}
-	FR = Weekday{weekday: 4}
-	SA = Weekday{weekday: 5}
-	SU = Weekday{weekday: 6}
+	MO = RWeekday{weekday: 0}
+	TU = RWeekday{weekday: 1}
+	WE = RWeekday{weekday: 2}
+	TH = RWeekday{weekday: 3}
+	FR = RWeekday{weekday: 4}
+	SA = RWeekday{weekday: 5}
+	SU = RWeekday{weekday: 6}
 )
 
 // ROption offers options to construct a RRule instance
@@ -92,7 +92,7 @@ type ROption struct {
 	Freq       Frequency
 	Dtstart    time.Time
 	Interval   int
-	Wkst       Weekday
+	Wkst       RWeekday
 	Count      int
 	Until      time.Time
 	Bysetpos   []int
@@ -100,7 +100,7 @@ type ROption struct {
 	Bymonthday []int
 	Byyearday  []int
 	Byweekno   []int
-	Byweekday  []Weekday
+	Byweekday  []RWeekday
 	Byhour     []int
 	Byminute   []int
 	Bysecond   []int
@@ -125,7 +125,7 @@ type RRule struct {
 	byyearday               []int
 	byweekno                []int
 	byweekday               []int
-	bynweekday              []Weekday
+	bynweekday              []RWeekday
 	byhour                  []int
 	byminute                []int
 	bysecond                []int
@@ -133,6 +133,11 @@ type RRule struct {
 	timeset                 []time.Time
 	len                     int
 }
+
+// NOTE
+// Try to find a way to convert most of the RRule configuration to a 'recurring' TemporalExpression.
+// If we can then we can remove a lot of the python code (Iterator etc..) and should be a lot more
+// efficient.
 
 // NewRRule construct a new RRule instance
 func NewRRule(arg ROption) (*RRule, error) {
@@ -173,7 +178,7 @@ func NewRRule(arg ROption) (*RRule, error) {
 		} else if r.freq == MONTHLY {
 			arg.Bymonthday = []int{r.dtstart.Day()}
 		} else if r.freq == WEEKLY {
-			arg.Byweekday = []Weekday{Weekday{weekday: toPyWeekday(r.dtstart.Weekday())}}
+			arg.Byweekday = []RWeekday{RWeekday{weekday: toPyWeekday(r.dtstart.Weekday())}}
 		}
 	}
 	r.bymonth = arg.Bymonth
@@ -229,11 +234,11 @@ func NewRRule(arg ROption) (*RRule, error) {
 // obvious user error.
 func validateBounds(arg ROption) error {
 	bounds := []struct {
-		field []int
-		param string
-		bound []int
+		field     []int
+		param     string
+		bound     []int
 		plusMinus bool // If the bound also applies for -x to -y.
-	} {
+	}{
 		{arg.Bysecond, "bysecond", []int{0, 59}, false},
 		{arg.Byminute, "byminute", []int{0, 59}, false},
 		{arg.Byhour, "byhour", []int{0, 23}, false},
@@ -301,9 +306,7 @@ func (info *iterInfo) rebuild(year int, month time.Month) {
 	if year != info.lastyear {
 		info.yearlen = 365 + isLeap(year)
 		info.nextyearlen = 365 + isLeap(year+1)
-		info.firstyday = time.Date(
-			year, time.January, 1, 0, 0, 0, 0,
-			info.rrule.dtstart.Location())
+		info.firstyday = time.Date(year, time.January, 1, 0, 0, 0, 0, info.rrule.dtstart.Location())
 		info.yearweekday = toPyWeekday(info.firstyday.Weekday())
 		info.wdaymask = WDAYMASK[info.yearweekday:]
 		if info.yearlen == 365 {
