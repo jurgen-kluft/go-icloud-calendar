@@ -155,7 +155,7 @@ func (c *Calendar) GetEventByIndex(e Index) (Event, error) {
 	if i < 0 {
 		i = -i
 		if i < len(c.RecurringEvents) {
-			i = int(c.RecurringEvents[i])
+			i = c.RecurringEvents[i].ToInt()
 		} else {
 			return Event{}, fmt.Errorf("There is no recurring event for index %d", i)
 		}
@@ -210,14 +210,17 @@ func (c *Calendar) GetTimeline(dateTime time.Time, futureDays int) *Timeline {
 		timeline.Events[day.String()] = make([]Index, 0, 0)
 		day = day.AddDate(0, 0, 1)
 	}
-	for rei, rer := range c.RecurringEventRules {
+	for reri, rer := range c.RecurringEventRules {
 		re := rer.Between(timeline.Start, timeline.End, true)
 		for _, e := range re {
 			day = time.Date(e.Year(), e.Month(), e.Day(), 0, 0, 0, 0, &tz)
 			events, exists := timeline.Events[day.String()]
 			if exists {
+				fmt.Printf("Recurring event, %s to %s; %s\n", timeline.Start, timeline.End, re)
+				rei := c.RecurringEvents[reri]
 				events = append(events, -Index(rei))
-				// Do i need to set it on the map again ?
+				timeline.Events[day.String()] = events
+				break
 			}
 		}
 	}
