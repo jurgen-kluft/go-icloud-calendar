@@ -2,26 +2,42 @@ package icalendar
 
 import (
 	"fmt"
-	"sort"
+	"github.com/jurgen-kluft/go-icloud-calendar/rrule"
+	"math"
 	"time"
 )
 
 // Calendar is a structure that mainly contains events
 type Calendar struct {
-	Name               string
-	Description        string
-	reader             Reader
-	parser             *parser
-	Version            float64
-	Timezone           time.Location
-	Events             Events
-	EventsByDate       map[string][]*Event
-	EventsByID         map[string]*Event
-	EventsByImportedID map[string]*Event
+	Name                string
+	Description         string
+	reader              Reader
+	parser              *parser
+	Version             float64
+	Timezone            time.Location
+	Events              Events
+	EventsByDate        map[string][]Index
+	EventsByID          map[string]Index
+	EventsByImportedID  map[string]Index
+	RecurringEvents     []Index
+	RecurringEventRules RRules
+}
+
+type Index int
+
+func (i Index) IsValid() bool {
+	return int(i) != math.MaxInt32
+}
+func (i Index) Invalid() Index {
+	return Index(math.MaxInt32)
+}
+func (i Index) ToInt() int {
+	return int(i)
 }
 
 // Events is an array of Event
 type Events []Event
+type RRules []*rrule.RRule
 
 func (events Events) Len() int {
 	return len(events)
@@ -35,18 +51,20 @@ func (events Events) Swap(i, j int) {
 	events[i], events[j] = events[j], events[i]
 }
 
-// NewURLCalendar returns a new instance of a Calendar that has a URL source
 func newCalendar() *Calendar {
 	c := &Calendar{}
 	c.reader = nil
 	c.parser = nil
 	c.Events = make([]Event, 0, 8)
-	c.EventsByDate = make(map[string][]*Event)
-	c.EventsByID = make(map[string]*Event)
-	c.EventsByImportedID = make(map[string]*Event)
+	c.EventsByDate = make(map[string][]Index)
+	c.EventsByID = make(map[string]Index)
+	c.EventsByImportedID = make(map[string]Index)
+	c.RecurringEvents = make([]Index, 0, 0)
+	c.RecurringEventRules = make([]*rrule.RRule, 0, 0)
 	return c
 }
 
+// NewURLCalendar returns a new instance of a Calendar that has a URL source
 func NewURLCalendar(URL string) *Calendar {
 	c := newCalendar()
 	c.reader = readingFromURL(URL)
@@ -54,6 +72,7 @@ func NewURLCalendar(URL string) *Calendar {
 	return c
 }
 
+// NewFileCalendar returns a new instance of a Calendar that has a file source
 func NewFileCalendar(filepath string) *Calendar {
 	c := newCalendar()
 	c.reader = readingFromFile(filepath)
@@ -80,93 +99,130 @@ func (c *Calendar) Load() error {
 		c.EventsByImportedID = calendar.EventsByImportedID
 	}
 
+	// Sort ?
+
 	return err
 }
 
-// SetEvent add event to the calendar
-func (c *Calendar) SetEvent(event Event) (*Calendar, error) {
+// InsertEvent add event to the calendar
+func (c *Calendar) InsertEvent(event Event) (err error) {
 
 	// reference to the calendar
 	if event.Owner == nil || event.Owner != c {
 		event.Owner = c
 	}
+
 	// add the event to the main array with events
+	eventRef := len(c.Events)
 	c.Events = append(c.Events, event)
 
-	// pointer to the added event in the main array
-	eventPtr := &c.Events[len(c.Events)-1]
+	if event.Rrule == "" {
 
-	// calculate the start and end day of the event
-	eventStartTime := event.Start
-	eventEndTime := event.End
-	tz := c.Timezone
-	eventStartDate := time.Date(eventStartTime.Year(), eventStartTime.Month(), eventStartTime.Day(), 0, 0, 0, 0, &tz)
-	eventEndDate := time.Date(eventEndTime.Year(), eventEndTime.Month(), eventEndTime.Day(), 0, 0, 0, 0, &tz)
+		// calculate the start and end day of the event
+		eventStartTime := event.Start
+		eventEndTime := event.End
+		tz := c.Timezone
+		eventStartDate := time.Date(eventStartTime.Year(), eventStartTime.Month(), eventStartTime.Day(), 0, 0, 0, 0, &tz)
+		eventEndDate := time.Date(eventEndTime.Year(), eventEndTime.Month(), eventEndTime.Day(), 0, 0, 0, 0, &tz)
 
-	// faster search by date, add each date from start to end date
-	for eventDate := eventStartDate; eventDate.Before(eventEndDate) || eventDate.Equal(eventEndDate); eventDate = eventDate.Add(24 * time.Hour) {
-		c.EventsByDate[eventDate.Format(YmdHis)] = append(c.EventsByDate[eventDate.Format(YmdHis)], eventPtr)
+		// faster search by date, add each date from start to end date
+		for eventDate := eventStartDate; eventDate.Before(eventEndDate) || eventDate.Equal(eventEndDate); eventDate = eventDate.Add(24 * time.Hour) {
+			c.EventsByDate[eventDate.Format(YmdHis)] = append(c.EventsByDate[eventDate.Format(YmdHis)], Index(eventRef))
+		}
+
+		// faster search by id
+		c.EventsByID[event.ID] = Index(eventRef)
+
+		if event.ImportedID != "" {
+			c.EventsByImportedID[event.ImportedID] = Index(eventRef)
+		}
+
+	} else {
+		var rule *rrule.RRule
+		rule, err = rrule.StrToRRule(event.Rrule)
+		if err == nil {
+			c.RecurringEvents = append(c.RecurringEvents, Index(-eventRef))
+			c.RecurringEventRules = append(c.RecurringEventRules, rule)
+		}
 	}
 
-	// faster search by id
-	c.EventsByID[event.ID] = eventPtr
-
-	if event.ImportedID != "" {
-		c.EventsByImportedID[event.ImportedID] = eventPtr
-	}
-
-	return c, nil
+	return err
 }
 
-// GetEventByID get event by id
-func (c *Calendar) GetEventByID(eventID string) (*Event, error) {
+// GetEvent get event by index
+func (c *Calendar) GetEventByIndex(e Index) (Event, error) {
+	i := e.ToInt()
+	if i < 0 {
+		i = -i
+		if i < len(c.RecurringEvents) {
+			i = int(c.RecurringEvents[i])
+		} else {
+			return Event{}, fmt.Errorf("There is no recurring event for index %d", i)
+		}
+	}
+	if i < len(c.Events) {
+		return c.Events[i], nil
+	}
+	return Event{}, fmt.Errorf("There is no event for index %d", i)
+}
+
+// GetEventIndexByID get event by id
+func (c *Calendar) GetEventIndexByID(eventID string) (Index, error) {
 	event, ok := c.EventsByID[eventID]
 	if ok {
 		return event, nil
 	}
-	return nil, fmt.Errorf("There is no event with id %s", eventID)
+	return event.Invalid(), fmt.Errorf("There is no event with id %s", eventID)
 }
 
-// GetEventByImportedID get event by imported id
-func (c *Calendar) GetEventByImportedID(eventID string) (*Event, error) {
+// GetEventIndexByImportedID get event by imported id
+func (c *Calendar) GetEventIndexByImportedID(eventID string) (Index, error) {
 	event, ok := c.EventsByImportedID[eventID]
 	if ok {
 		return event, nil
 	}
-	return nil, fmt.Errorf("There is no event with id %s", eventID)
+	return event.Invalid(), fmt.Errorf("There is no event with id %s", eventID)
 }
 
-// GetEventsByDate get all events for specified date
-func (c *Calendar) GetEventsByDate(dateTime time.Time) []*Event {
+// GetEventIndicesByDate get all events for specified date
+func (c *Calendar) GetEventIndicesByDate(dateTime time.Time) []Index {
 	tz := c.Timezone
 	day := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, &tz)
 	events, ok := c.EventsByDate[day.Format(YmdHis)]
 	if ok {
 		return events
 	}
-	return []*Event{}
+	return []Index{}
 }
 
-// GetUpcomingEvents returns the next n-Events.
-func (c *Calendar) GetUpcomingEvents(n int) []Event {
-	upcomingEvents := []Event{}
+func (c *Calendar) GetTimeline(dateTime time.Time, futureDays int) *Timeline {
+	tz := c.Timezone
+	today := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, &tz)
 
-	// sort events of calendar
-	sort.Sort(c.Events)
+	timeline := &Timeline{}
+	timeline.Start = today
+	timeline.End = today.AddDate(0, 0, futureDays)
+	timeline.Cal = c
+	timeline.Events = make(map[string][]Index)
 
-	now := time.Now()
-	// find next event
-	for _, event := range c.Events {
-		if event.Start.After(now) {
-			upcomingEvents = append(upcomingEvents, event)
-			// break if we collect enough events
-			if len(upcomingEvents) >= n {
-				break
+	day := today
+	for i := 0; i <= futureDays; i++ {
+		timeline.Events[day.String()] = make([]Index, 0, 0)
+		day = day.AddDate(0, 0, 1)
+		i++
+	}
+	for rei, rer := range c.RecurringEventRules {
+		re := rer.Between(timeline.Start, timeline.End, true)
+		for _, e := range re {
+			day = time.Date(e.Year(), e.Month(), e.Day(), 0, 0, 0, 0, &tz)
+			events, exists := timeline.Events[day.String()]
+			if exists {
+				events = append(events, -Index(rei))
+				// Do i need to set it on the map again ?
 			}
 		}
 	}
-
-	return upcomingEvents
+	return timeline
 }
 
 func (c *Calendar) String() string {
