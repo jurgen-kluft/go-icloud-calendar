@@ -22,6 +22,34 @@ func TestLoadCalendar(t *testing.T) {
 	}
 }
 
+func TestLoadCalendar2(t *testing.T) {
+	reader := readingFromFile("testCalendars/4eventsWithRRule.ics")
+	parser := createParser(reader)
+
+	calendar := newCalendar()
+	err := parser.read(calendar)
+
+	if err != nil {
+		parseErrors := parser.getErrors()
+		for i, pErr := range parseErrors {
+			t.Errorf("Parsing Error %d: %s", i, pErr)
+		}
+	}
+
+	tl := calendar.GetTimeline(time.Now(), 1)
+	t.Logf("Timeline with %d days", len(tl.Events))
+	for day, events := range tl.Events {
+		t.Logf("Day %s; recurring events: %d", day, len(events))
+		for _, e := range events {
+			event, err := calendar.GetEventByIndex(e)
+			if err != nil {
+				t.Errorf("   Event by index error %s", err)
+			} else {
+				t.Logf("   Recurring event: %s", event.String())
+			}
+		}
+	}
+}
 func TestNewParser(t *testing.T) {
 	reader := readingFromFile("testCalendars/2eventsCal.ics")
 	parser := createParser(reader)
@@ -104,12 +132,12 @@ func TestCalendarInfo(t *testing.T) {
 	if errYMD != nil {
 		t.Errorf("(YmdHis time format) Unexpected error %s", errYMD)
 	}
-	eventsByDate := calendar.GetEventsByDate(geometryExamIcsFormat)
+	eventsByDate := calendar.GetEventIndicesByDate(geometryExamIcsFormat)
 	if len(eventsByDate) != 1 {
 		t.Errorf("(ics time format) Expected %d events in calendar for the date 2014-06-16, got %d events", 1, len(eventsByDate))
 	}
 
-	eventsByDate = calendar.GetEventsByDate(geometryExamYmdHis)
+	eventsByDate = calendar.GetEventIndicesByDate(geometryExamYmdHis)
 	if len(eventsByDate) != 1 {
 		t.Errorf("(YmdHis time format) Expected %d events in calendar for the date 2014-06-16, got %d events", 1, len(eventsByDate))
 	}
@@ -126,10 +154,12 @@ func TestCalendarEvents(t *testing.T) {
 		t.Errorf("Expected 0 error, found %d in :\n  %#v", len(parseErrors), parseErrors)
 	}
 
-	event, err := calendar.GetEventByImportedID("btb9tnpcnd4ng9rn31rdo0irn8@google.com")
+	ievent, err := calendar.GetEventIndexByImportedID("btb9tnpcnd4ng9rn31rdo0irn8@google.com")
 	if err != nil {
 		t.Errorf("Failed to get event by id with error %s", err)
 	}
+
+	event, err := calendar.GetEventByIndex(ievent)
 
 	//  event must have
 	start, _ := time.Parse(IcsFormat, "20140714T100000Z")
@@ -182,7 +212,7 @@ func TestCalendarEvents(t *testing.T) {
 	}
 
 	if event.Sequence != seq {
-		t.Errorf("Expected sequence %s, found %s", seq, event.Sequence)
+		t.Errorf("Expected sequence %d, found %d", seq, event.Sequence)
 	}
 
 	if event.Status != status {
@@ -207,10 +237,14 @@ func TestCalendarEvents(t *testing.T) {
 	}
 
 	// SECOND EVENT WITHOUT ATTENDEES AND ORGANIZER
-	eventNoAttendees, errNoAttendees := calendar.GetEventByImportedID("mhhesb7si5968njvthgbiub7nk@google.com")
+	ieventNoAttendees, errNoAttendees := calendar.GetEventIndexByImportedID("mhhesb7si5968njvthgbiub7nk@google.com")
 	attendeesCount = 0
 	org = new(Attendee)
 
+	if errNoAttendees != nil {
+		t.Errorf("Failed to get event by id with error %s", errNoAttendees)
+	}
+	eventNoAttendees, errNoAttendees := calendar.GetEventByIndex(ieventNoAttendees)
 	if errNoAttendees != nil {
 		t.Errorf("Failed to get event by id with error %s", errNoAttendees)
 	}
@@ -235,10 +269,12 @@ func TestCalendarEventAttendees(t *testing.T) {
 		t.Errorf("Expected 0 error, found %d in :\n  %#v", len(parseErrors), parseErrors)
 	}
 
-	event, err := calendar.GetEventByImportedID("btb9tnpcnd4ng9rn31rdo0irn8@google.com")
+	ievent, err := calendar.GetEventIndexByImportedID("btb9tnpcnd4ng9rn31rdo0irn8@google.com")
 	if err != nil {
 		t.Errorf("Failed to get event by id with error %s", err)
 	}
+	event, err := calendar.GetEventByIndex(ievent)
+
 	attendees := event.Attendees
 	attendeesCount := 3
 
@@ -311,20 +347,20 @@ func TestCalendarMultidayEvent(t *testing.T) {
 	}
 
 	// Test a day before the start day
-	events := calendar.GetEventsByDate(time.Date(2016, 8, 31, 0, 0, 0, 0, time.UTC))
+	events := calendar.GetEventIndicesByDate(time.Date(2016, 8, 31, 0, 0, 0, 0, time.UTC))
 
 	// Test exact start day
-	events = calendar.GetEventsByDate(time.Date(2016, 9, 1, 0, 0, 0, 0, time.UTC))
+	events = calendar.GetEventIndicesByDate(time.Date(2016, 9, 1, 0, 0, 0, 0, time.UTC))
 	if len(events) != 1 {
 		t.Errorf("Expected 1 event on the start day, got %d", len(events))
 	}
 
 	// Test a random day between start and end date
-	events = calendar.GetEventsByDate(time.Date(2016, 10, 1, 0, 0, 0, 0, time.UTC))
+	events = calendar.GetEventIndicesByDate(time.Date(2016, 10, 1, 0, 0, 0, 0, time.UTC))
 	if len(events) != 1 {
 		t.Errorf("Expected 1 event between start and end, got %d", len(events))
 	}
 
 	// Test a day after the end day
-	events = calendar.GetEventsByDate(time.Date(2016, 11, 1, 0, 0, 0, 0, time.UTC))
+	events = calendar.GetEventIndicesByDate(time.Date(2016, 11, 1, 0, 0, 0, 0, time.UTC))
 }

@@ -48,7 +48,7 @@ func (e *Event) GenerateUUID() string {
 	if e.ImportedID != "" {
 		toBeHashed = fmt.Sprintf("%s%s%s", e.Start, e.End, e.ImportedID)
 	} else {
-		toBeHashed = fmt.Sprintf("%s%s%d", e.Start, e.End, time.Now().UnixNano)
+		toBeHashed = fmt.Sprintf("%s%s%d", e.Start, e.End, time.Now().UnixNano())
 	}
 	return fmt.Sprintf("%x", md5.Sum(stringToByte(toBeHashed)))
 }

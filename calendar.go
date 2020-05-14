@@ -209,7 +209,6 @@ func (c *Calendar) GetTimeline(dateTime time.Time, futureDays int) *Timeline {
 	for i := 0; i <= futureDays; i++ {
 		timeline.Events[day.String()] = make([]Index, 0, 0)
 		day = day.AddDate(0, 0, 1)
-		i++
 	}
 	for rei, rer := range c.RecurringEventRules {
 		re := rer.Between(timeline.Start, timeline.End, true)
