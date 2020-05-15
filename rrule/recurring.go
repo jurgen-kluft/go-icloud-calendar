@@ -4,6 +4,9 @@ import (
 	"time"
 )
 
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
 // NextOccurence finds the next occurence of the temporal expression starting at t
 func NextOccurence(t time.Time, te TemporalExpression) time.Time {
 	t = BeginningOfDay(t)
@@ -24,6 +27,9 @@ func NextN(t time.Time, te TemporalExpression, n int) []time.Time {
 	return tt
 }
 
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
 // TemporalExpression matches a subset of time values
 type TemporalExpression interface {
 
@@ -31,11 +37,103 @@ type TemporalExpression interface {
 	Includes(t time.Time) bool
 }
 
-// Day is a temporal expression that matches a day of the month starting at 1
-// negative numbers start at the end of the month and move backwards
-type Day int
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 
-func (d Day) normalize(t time.Time) int {
+// AlwaysOrNeverExpression is a temporal expression that always returns false, it is only here for
+// convenience to initialize a TemporalExpression.
+type AlwaysOrNeverExpression int
+
+const (
+	Never AlwaysOrNeverExpression = iota
+	Always
+)
+
+// Includes returns true when provided time's day matches the expressions
+func (a AlwaysOrNeverExpression) Includes(t time.Time) bool {
+	return a == Always
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// DayEventExpression is a temporal expression that matches a time-window (start - end) on
+// one day.
+type DayEventExpression struct {
+	SHour int
+	SMin  int
+	EHour int
+	EMin  int
+}
+
+// Includes returns true when provided time matches the expression
+func (t DayEventExpression) Includes(c time.Time) bool {
+	return (c.Hour() >= t.SHour && c.Minute() >= t.SMin) && (c.Hour() <= t.EHour && c.Minute() < t.EMin)
+}
+
+// DayEvents is a helper function that combines multiple DayEventExpression temporal
+// expressions with a logical OR operation
+func DayEvents(slots ...DayEventExpression) TemporalExpression {
+	ee := make([]TemporalExpression, len(slots))
+	for i, d := range slots {
+		ee[i] = DayEventExpression{SHour: d.SHour, SMin: d.SMin, EHour: d.EHour, EMin: d.EMin}
+	}
+	return Or(ee...)
+}
+
+// DayEvent is a helper function that creates a single DayEventExpression expression
+func DayEvent(start time.Time, end time.Time) TemporalExpression {
+	slot := DayEventExpression{SHour: start.Hour(), SMin: start.Minute(), EHour: end.Hour(), EMin: end.Minute()}
+	return slot
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// BeforeDateExpression is a temporal expression that matches if a date is
+// before a certain set date
+type BeforeDateExpression time.Time
+
+// Includes returns true when provided time's day matches the expressions
+func (b BeforeDateExpression) Includes(t time.Time) bool {
+	date := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	return date.Before(time.Time(b))
+}
+
+// BeforeDate is a helper function that
+func BeforeDate(date time.Time) TemporalExpression {
+	return BeforeDateExpression(date)
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// AfterDateExpression is a temporal expression that matches if a date is
+// after a certain set date
+type AfterDateExpression time.Time
+
+// Includes returns true when provided time's day matches the expressions
+func (b AfterDateExpression) Includes(t time.Time) bool {
+	return t.After(time.Time(b))
+}
+
+// AfterDate is a helper function that
+func AfterDate(t time.Time, include bool) TemporalExpression {
+	date := time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999, t.Location())
+	if include {
+		date = date.AddDate(0, 0, -1)
+	}
+	return AfterDateExpression(date)
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// DayExpression is a temporal expression that matches a day of the month starting at 1
+// negative numbers start at the end of the month and move backwards
+type DayExpression int
+
+func (d DayExpression) normalize(t time.Time) int {
 	day := int(d)
 	if day < 0 {
 		day = EndOfMonth(t).Day() + day + 1
@@ -43,32 +141,62 @@ func (d Day) normalize(t time.Time) int {
 	return day
 }
 
-// Include returns true when provided time's day matches the expressions
-func (d Day) Includes(t time.Time) bool {
+// Includes returns true when provided time's day matches the expressions
+func (d DayExpression) Includes(t time.Time) bool {
 	return d.normalize(t) == t.Day()
 }
 
-// Days is a helper function that combines multiple Day temporal
-// expressions with a logical OR operation
+// Days is a helper function that combines multiple DayExpression
+// objects with a logical OR operation
 func Days(days ...int) TemporalExpression {
 	ee := make([]TemporalExpression, len(days))
 	for i, d := range days {
-		ee[i] = Day(d)
+		ee[i] = DayExpression(d)
 	}
 	return Or(ee...)
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// DailyExpression is a temporal expression that matches a day using a start date, interval and count
+type DailyExpression struct {
+	Year     int
+	Month    int
+	Day      int
+	Interval int
+	Count    int
+}
+
+// Includes returns true when provided date falls in a valid week according to daily
+func (t DailyExpression) Includes(c time.Time) bool {
+	start := time.Date(t.Year, time.Month(t.Month), t.Day, 0, 0, 0, 0, time.UTC)
+	end := time.Date(c.Year(), c.Month(), c.Day(), 0, 0, 0, 0, time.UTC)
+	days := int(end.Sub(start).Hours() / 24)
+	count := (days + (t.Interval - 1)) / t.Interval
+	return (days%(t.Interval)) == 0 && (t.Count == 0 || t.Count <= count)
+}
+
+// Daily is a helper function that creates a single daily expression
+func Daily(year int, month int, day int, interval int, count int) TemporalExpression {
+	w := DailyExpression{Year: year, Month: month, Day: day, Interval: interval, Count: count}
+	return w
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// DayRangeExpression is a temporal expression that matches all
+// days between the Start and End values
+type DayRangeExpression struct {
+	Start Day
+	End   Day
 }
 
 // DayRange returns a temporal expression that matches all
 // days between the start and end days
 func DayRange(start, end int) DayRangeExpression {
 	return DayRangeExpression{Day(start), Day(end)}
-}
-
-// DayRange is a temporal expression that matches all
-// days between the Start and End values
-type DayRangeExpression struct {
-	Start Day
-	End   Day
 }
 
 // Includes returns true when the provided time's day falls
@@ -78,11 +206,14 @@ func (dr DayRangeExpression) Includes(t time.Time) bool {
 	return dr.Start.normalize(t) <= d && d <= dr.End.normalize(t)
 }
 
-// Week is a temporal expression that matches a week in a month starting at 1
-// negative numbers start at the end of the month and move backwards
-type Week int
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 
-func (w Week) normalize(t time.Time) int {
+// WeekInMonthExpression is a temporal expression that matches a week in a month starting at 1
+// negative numbers start at the end of the month and move backwards
+type WeekInMonthExpression int
+
+func (w WeekInMonthExpression) normalize(t time.Time) int {
 	week := int(w)
 	if week < 0 {
 		week = WeekOfMonth(EndOfMonth(t)) + week + 1
@@ -91,36 +222,66 @@ func (w Week) normalize(t time.Time) int {
 }
 
 // Includes returns true when the provided time's week matches the expression's
-func (w Week) Includes(t time.Time) bool {
+func (w WeekInMonthExpression) Includes(t time.Time) bool {
 	return WeekOfMonth(t) == w.normalize(t)
 }
 
-// Weeks is a helper function that combines multiple Week temporal
+// WeeksInMonth is a helper function that combines multiple Week temporal
 // expressions with a logical OR operation
-func Weeks(weeks ...int) TemporalExpression {
+func WeeksInMonth(weeks ...int) TemporalExpression {
 	ee := make([]TemporalExpression, len(weeks))
 	for i, w := range weeks {
-		ee[i] = Week(w)
+		ee[i] = WeekInMonthExpression(w)
 	}
 	return Or(ee...)
 }
 
-// Weekday is a temporal expression that matches a day of the week
-type Weekday time.Weekday
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// WeeklyExpression is a temporal expression that matches a week using a start date and week interval
+type WeeklyExpression struct {
+	Year     int
+	Month    int
+	Day      int
+	Interval int
+	Count    int
+}
+
+// Includes returns true when provided date falls in a valid week according to weekly
+func (t WeeklyExpression) Includes(c time.Time) bool {
+	start := time.Date(t.Year, time.Month(t.Month), t.Day, 0, 0, 0, 0, time.UTC)
+	end := time.Date(c.Year(), c.Month(), c.Day(), 0, 0, 0, 0, time.UTC)
+	days := int(end.Sub(start).Hours() / 24)
+	count := (days + (t.Interval - 1)) / t.Interval
+	return (days%t.Interval) == 0 && (t.Count == 0 || count <= t.Count)
+}
+
+// Weekly is a helper function that creates a single weekly expression
+func Weekly(year int, month int, day int, interval int, count int) TemporalExpression {
+	w := WeeklyExpression{Year: year, Month: month, Day: day, Interval: interval, Count: count}
+	return w
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// WeekdayExpression is a temporal expression that matches a day of the week
+type WeekdayExpression time.Weekday
 
 const (
-	Sunday Weekday = iota
-	Monday
-	Tuesday
-	Wednesday
-	Thursday
-	Friday
-	Saturday
+	Sunday    WeekdayExpression = WeekdayExpression(time.Sunday)
+	Monday                      = WeekdayExpression(time.Monday)
+	Tuesday                     = WeekdayExpression(time.Tuesday)
+	Wednesday                   = WeekdayExpression(time.Wednesday)
+	Thursday                    = WeekdayExpression(time.Thursday)
+	Friday                      = WeekdayExpression(time.Friday)
+	Saturday                    = WeekdayExpression(time.Saturday)
 )
 
 // Includes returns true if the provided time's day of the week
 // matches the expression's
-func (wd Weekday) Includes(t time.Time) bool {
+func (wd WeekdayExpression) Includes(t time.Time) bool {
 	return t.Weekday() == time.Weekday(wd)
 }
 
@@ -129,16 +290,13 @@ func (wd Weekday) Includes(t time.Time) bool {
 func Weekdays(weekdays ...time.Weekday) TemporalExpression {
 	ee := make([]TemporalExpression, len(weekdays))
 	for i, wd := range weekdays {
-		ee[i] = Weekday(wd)
+		ee[i] = WeekdayExpression(wd)
 	}
 	return Or(ee...)
 }
 
-// WeekdayRange returns a temporal expression that matches all
-// days between the start and end values
-func WeekdayRange(start, end time.Weekday) WeekdayRangeExpression {
-	return WeekdayRangeExpression{start, end}
-}
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 
 // WeekdayRangeExpression is a temporal expression that matches all
 // days between the Start and End values
@@ -154,27 +312,71 @@ func (wr WeekdayRangeExpression) Includes(t time.Time) bool {
 	return wr.Start <= w && w <= wr.End
 }
 
-// Month is a temporal expression which matches a month
-type Month time.Month
+// WeekdayRange returns a temporal expression that matches all
+// days between the start and end values
+func WeekdayRange(start, end time.Weekday) WeekdayRangeExpression {
+	return WeekdayRangeExpression{start, end}
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// DateRangeExpression is a temporal expression that matches all
+// days between the Start and End values
+type DateRangeExpression struct {
+	StartMonth int
+	StartDay   int
+	EndMonth   int
+	EndDay     int
+}
+
+// Includes returns true when the provided time's weekday falls
+// between the range's Start and Stop values
+func (dr DateRangeExpression) Includes(t time.Time) bool {
+	m := int(t.Month())
+	d := t.Day()
+	if m == dr.StartMonth && m == dr.EndMonth {
+		return d >= dr.StartDay && d <= dr.EndDay
+	} else if m > dr.StartMonth && m < dr.EndMonth {
+		return true
+	} else if m == dr.StartMonth {
+		return d >= dr.StartDay
+	} else if m == dr.EndMonth {
+		return d <= dr.EndDay
+	}
+	return false
+}
+
+// DateRange returns a temporal expression that matches all
+// days between start month:day and end month:day
+func DateRange(start, end time.Time) DateRangeExpression {
+	return DateRangeExpression{int(start.Month()), start.Day(), int(end.Month()), end.Day()}
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// MonthExpression is a temporal expression which matches a single month
+type MonthExpression time.Month
 
 const (
-	January Month = 1 + iota
-	February
-	March
-	April
-	May
-	June
-	July
-	August
-	September
-	October
-	November
-	December
+	January   MonthExpression = MonthExpression(time.January)
+	February                  = MonthExpression(time.February)
+	March                     = MonthExpression(time.March)
+	April                     = MonthExpression(time.April)
+	May                       = MonthExpression(time.May)
+	June                      = MonthExpression(time.June)
+	July                      = MonthExpression(time.July)
+	August                    = MonthExpression(time.August)
+	September                 = MonthExpression(time.September)
+	October                   = MonthExpression(time.October)
+	November                  = MonthExpression(time.November)
+	December                  = MonthExpression(time.December)
 )
 
-// Include returns true when the provided time's date
+// Includes returns true when the provided time's date
 // matches the temporal expression's
-func (m Month) Includes(t time.Time) bool {
+func (m MonthExpression) Includes(t time.Time) bool {
 	return t.Month() == time.Month(m)
 }
 
@@ -183,16 +385,44 @@ func (m Month) Includes(t time.Time) bool {
 func Months(months ...time.Month) TemporalExpression {
 	ee := make([]TemporalExpression, len(months))
 	for i, m := range months {
-		ee[i] = Month(m)
+		ee[i] = MonthExpression(m)
 	}
 	return Or(ee...)
 }
 
-// MonthRange returns a temporal expression that matches all
-// months between the start and end values
-func MonthRange(start, end time.Month) MonthRangeExpression {
-	return MonthRangeExpression{start, end}
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// MonthlyExpression is a temporal expression that matches a week using a start date and week interval
+type MonthlyExpression struct {
+	Year     int
+	Month    int
+	Interval int
+	Count    int
 }
+
+// Includes returns true when provided date falls in a valid month according to monthly
+func (m MonthlyExpression) Includes(c time.Time) bool {
+	year := c.Year()
+	month := int(c.Month())
+	if year < m.Year {
+		return false
+	} else if year == m.Year && month < m.Month {
+		return false
+	}
+	months := (month + ((year - m.Year) * 12)) - m.Month
+	count := months / m.Interval
+	return (months%m.Interval) == 0 && (m.Count == 0 || count <= m.Count)
+}
+
+// Monthly is a helper function that creates a single monthly expression
+func Monthly(year int, month int, interval int, count int) TemporalExpression {
+	w := MonthlyExpression{Year: year, Month: month, Interval: interval, Count: count}
+	return w
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 
 // MonthRangeExpression is a temporal expression that matches all
 // months between the Start and End values
@@ -208,36 +438,77 @@ func (mr MonthRangeExpression) Includes(t time.Time) bool {
 	return mr.Start <= m && m <= mr.End
 }
 
-// Year is a temporal expression which matchese a year
-type Year int
+// MonthRange returns a temporal expression that matches all
+// months between the start and end values
+func MonthRange(start, end time.Month) MonthRangeExpression {
+	return MonthRangeExpression{start, end}
+}
 
-// Include returns true when the provided time's year
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// YearExpression is a temporal expression which matchese a year
+type YearExpression int
+
+// Includes returns true when the provided time's year
 // matches the temporal expression's
-func (y Year) Includes(t time.Time) bool {
+func (y YearExpression) Includes(t time.Time) bool {
 	return t.Year() == int(y)
 }
 
-// Years is a helper function that combines multipe Year
-// temporal expressions using a local OR operation
+// Years is a helper function that combines multipe YearExpression
+// objects using a local OR operation
 func Years(years ...int) TemporalExpression {
 	ee := make([]TemporalExpression, len(years))
 	for i, y := range years {
-		ee[i] = Year(y)
+		ee[i] = YearExpression(y)
 	}
 	return Or(ee...)
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// YearlyExpression is a temporal expression that matches a year using a start, interval and count
+type YearlyExpression struct {
+	Year     int
+	Interval int
+	Count    int
+}
+
+// Includes returns true when provided date falls in a valid year according to yearly
+func (m YearlyExpression) Includes(c time.Time) bool {
+	year := c.Year()
+	if year < m.Year {
+		return false
+	} else if year == m.Year {
+		return true
+	}
+	years := (year - m.Year)
+	count := years / m.Interval
+	return (years%m.Interval) == 0 && (m.Count == 0 || count <= m.Count)
+}
+
+// Yearly is a helper function that creates a single yearly expression
+func Yearly(year int, interval int, count int) TemporalExpression {
+	w := YearlyExpression{Year: year, Interval: interval, Count: count}
+	return w
+}
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// YearRangeExpression is a temporal expression that matches all
+// years between the Start and End values
+type YearRangeExpression struct {
+	Start YearExpression
+	End   YearExpression
 }
 
 // YearRange returns a temporal expression that matches all
 // years between the start and end values
 func YearRange(start, end int) YearRangeExpression {
-	return YearRangeExpression{Year(start), Year(end)}
-}
-
-// YearRangeExpression is a temporal expression that matches all
-// years between the Start and End values
-type YearRangeExpression struct {
-	Start Year
-	End   Year
+	return YearRangeExpression{YearExpression(start), YearExpression(end)}
 }
 
 // Includes returns true when the provided time's years falls
@@ -247,26 +518,32 @@ func (yr YearRangeExpression) Includes(t time.Time) bool {
 	return int(yr.Start) <= year && year <= int(yr.End)
 }
 
-// Date is temporal function that matches the year, month, and day
-type Date time.Time
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
+// DateExpression is temporal function that matches the year, month, and day
+type DateExpression time.Time
 
 // Includes returns true when the provide time's year, month, and
 // day match the temporal expression's
-func (d Date) Includes(t time.Time) bool {
+func (d DateExpression) Includes(t time.Time) bool {
 	y0, m0, d0 := t.Date()
 	y1, m1, d1 := time.Time(d).Date()
 	return y0 == y1 && m0 == m1 && d0 == d1
 }
 
-// Dates is a helper function that combines multiple Date temporal
-// expressions using a logical OR operation
+// Dates is a helper function that combines multiple DateExpression
+// objects using a logical OR operation
 func Dates(dates ...time.Time) TemporalExpression {
 	ee := make([]TemporalExpression, len(dates))
 	for i, d := range dates {
-		ee[i] = Date(d)
+		ee[i] = DateExpression(d)
 	}
 	return Or(ee...)
 }
+
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
 
 // Or combines multiple temporal expressions into one using
 // a local Or operation
@@ -296,6 +573,9 @@ func (oe OrExpression) Includes(t time.Time) bool {
 	return false
 }
 
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
 // And combines multiple temporal expressions into one using
 // a local AND operation
 func And(ee ...TemporalExpression) AndExpression {
@@ -324,6 +604,9 @@ func (ae AndExpression) Includes(t time.Time) bool {
 	return true
 }
 
+// ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+
 // Not negates a temporal expression
 func Not(e TemporalExpression) NotExpression {
 	return NotExpression{e}
@@ -335,7 +618,7 @@ type NotExpression struct {
 	e TemporalExpression
 }
 
-// Include returns true when the underlying temporal expression
+// Includes returns true when the underlying temporal expression
 // does not match the provided time
 func (ne NotExpression) Includes(t time.Time) bool {
 	return !ne.e.Includes(t)

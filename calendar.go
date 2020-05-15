@@ -36,7 +36,7 @@ func (i Index) ToInt() int {
 }
 
 // Events is an array of Event
-type Events []Event
+type Events []*Event
 type RRules []*rrule.RRule
 
 func (events Events) Len() int {
@@ -55,7 +55,7 @@ func newCalendar() *Calendar {
 	c := &Calendar{}
 	c.reader = nil
 	c.parser = nil
-	c.Events = make([]Event, 0, 8)
+	c.Events = make([]*Event, 0, 8)
 	c.EventsByDate = make(map[string][]Index)
 	c.EventsByID = make(map[string]Index)
 	c.EventsByImportedID = make(map[string]Index)
@@ -105,7 +105,7 @@ func (c *Calendar) Load() error {
 }
 
 // InsertEvent add event to the calendar
-func (c *Calendar) InsertEvent(event Event) (err error) {
+func (c *Calendar) InsertEvent(event *Event) (err error) {
 
 	// reference to the calendar
 	if event.Owner == nil || event.Owner != c {
@@ -143,27 +143,28 @@ func (c *Calendar) InsertEvent(event Event) (err error) {
 		if err == nil {
 			c.RecurringEvents = append(c.RecurringEvents, Index(-eventRef))
 			c.RecurringEventRules = append(c.RecurringEventRules, rule)
+			err = rule.Compile(event.Start, event.End)
 		}
 	}
 
 	return err
 }
 
-// GetEvent get event by index
-func (c *Calendar) GetEventByIndex(e Index) (Event, error) {
+// GetEventByIndex get event by index
+func (c *Calendar) GetEventByIndex(e Index) (*Event, error) {
 	i := e.ToInt()
 	if i < 0 {
 		i = -i
 		if i < len(c.RecurringEvents) {
 			i = c.RecurringEvents[i].ToInt()
 		} else {
-			return Event{}, fmt.Errorf("There is no recurring event for index %d", i)
+			return nil, fmt.Errorf("There is no recurring event for index %d", i)
 		}
 	}
 	if i < len(c.Events) {
 		return c.Events[i], nil
 	}
-	return Event{}, fmt.Errorf("There is no event for index %d", i)
+	return nil, fmt.Errorf("There is no event for index %d", i)
 }
 
 // GetEventIndexByID get event by id
@@ -195,36 +196,31 @@ func (c *Calendar) GetEventIndicesByDate(dateTime time.Time) []Index {
 	return []Index{}
 }
 
-func (c *Calendar) GetTimeline(dateTime time.Time, futureDays int) *Timeline {
+// GetEventsFor get all active events for specified date
+func (c *Calendar) GetEventsFor(dateTime time.Time) []*Event {
 	tz := c.Timezone
-	today := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, &tz)
-
-	timeline := &Timeline{}
-	timeline.Start = today
-	timeline.End = today.AddDate(0, 0, futureDays)
-	timeline.Cal = c
-	timeline.Events = make(map[string][]Index)
-
-	day := today
-	for i := 0; i <= futureDays; i++ {
-		timeline.Events[day.String()] = make([]Index, 0, 0)
-		day = day.AddDate(0, 0, 1)
-	}
-	for reri, rer := range c.RecurringEventRules {
-		re := rer.Between(timeline.Start, timeline.End, true)
-		for _, e := range re {
-			day = time.Date(e.Year(), e.Month(), e.Day(), 0, 0, 0, 0, &tz)
-			events, exists := timeline.Events[day.String()]
-			if exists {
-				fmt.Printf("Recurring event, %s to %s; %s\n", timeline.Start, timeline.End, re)
-				rei := c.RecurringEvents[reri]
-				events = append(events, -Index(rei))
-				timeline.Events[day.String()] = events
-				break
+	day := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, &tz)
+	today := []*Event{}
+	events, ok := c.EventsByDate[day.Format(YmdHis)]
+	if ok {
+		for _, i := range events {
+			event, err := c.GetEventByIndex(i)
+			if err == nil {
+				today = append(today, event)
 			}
 		}
 	}
-	return timeline
+	for i, rer := range c.RecurringEventRules {
+		if rer.Includes(dateTime) {
+			rei := c.RecurringEvents[i]
+			event, err := c.GetEventByIndex(rei)
+			if err == nil {
+				today = append(today, event)
+			}
+		}
+	}
+
+	return today
 }
 
 func (c *Calendar) String() string {

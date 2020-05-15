@@ -161,7 +161,8 @@ func (option *ROption) String() string {
 
 // StrToROption converts string to ROption
 func StrToROption(rfcString string) (*ROption, error) {
-	return StrToROptionInLocation(rfcString, time.UTC)
+	ropt, err := StrToROptionInLocation(rfcString, time.UTC)
+	return ropt, err
 }
 
 // StrToROptionInLocation is same as StrToROption but in case local
@@ -234,16 +235,12 @@ func StrToROptionInLocation(rfcString string, loc *time.Location) (*ROption, err
 		// a value from the options this returns.
 		return nil, errors.New("RRULE property FREQ is required")
 	}
+	result.Code = rfcString
 	return &result, nil
 }
 
 func (r *RRule) String() string {
 	return r.OrigOptions.String()
-}
-
-func (set *Set) String() string {
-	res := set.Recurrence()
-	return strings.Join(res, "\n")
 }
 
 // StrToRRule converts string to RRule
@@ -253,97 +250,6 @@ func StrToRRule(rfcString string) (*RRule, error) {
 		return nil, e
 	}
 	return NewRRule(*option)
-}
-
-// StrToRRuleSet converts string to RRuleSet
-func StrToRRuleSet(s string) (*Set, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil, errors.New("empty string")
-	}
-	ss := strings.Split(s, "\n")
-	return StrSliceToRRuleSet(ss)
-}
-
-// StrSliceToRRuleSet converts given str slice to RRuleSet
-// In case there is a time met in any rule without specified time zone, when
-// it is parsed in UTC (see StrSliceToRRuleSetInLoc)
-func StrSliceToRRuleSet(ss []string) (*Set, error) {
-	return StrSliceToRRuleSetInLoc(ss, time.UTC)
-}
-
-// StrSliceToRRuleSetInLoc is same as StrSliceToRRuleSet, but by default parses local times
-// in specified default location
-func StrSliceToRRuleSetInLoc(ss []string, defaultLoc *time.Location) (*Set, error) {
-	if len(ss) == 0 {
-		return &Set{}, nil
-	}
-
-	set := Set{}
-
-	// According to RFC DTSTART is always the first line.
-	firstName, err := processRRuleName(ss[0])
-	if err != nil {
-		return nil, err
-	}
-
-	if firstName == "DTSTART" {
-		dt, err := strToDtStart(ss[0][len(firstName)+1:], defaultLoc)
-		if err != nil {
-			return nil, fmt.Errorf("strToDtStart failed: %v", err)
-		}
-		// default location should be taken from DTSTART property to correctly
-		// parse local times met in RDATE,EXDATE and other rules
-		defaultLoc = dt.Location()
-		set.DTStart(dt)
-		// We've processed the first one
-		ss = ss[1:]
-	}
-
-	for _, line := range ss {
-		name, err := processRRuleName(line)
-		if err != nil {
-			return nil, err
-		}
-		rule := line[len(name)+1:]
-
-		switch name {
-		case "RRULE", "EXRULE":
-			rOpt, err := StrToROption(rule)
-			if err != nil {
-				return nil, fmt.Errorf("StrToROption failed: %v", err)
-			}
-			if !set.GetDTStart().IsZero() {
-				rOpt.Dtstart = set.GetDTStart()
-			}
-			r, err := NewRRule(*rOpt)
-			if err != nil {
-				return nil, fmt.Errorf("NewRRule failed: %v", r)
-			}
-
-			if name == "RRULE" {
-				set.RRule(r)
-			} else {
-				set.ExRule(r)
-			}
-		case "RDATE", "EXDATE":
-			ts, err := StrToDatesInLoc(rule, defaultLoc)
-			if err != nil {
-				return nil, fmt.Errorf("strToDates failed: %v", err)
-			}
-			for _, t := range ts {
-				if name == "RDATE" {
-					set.RDate(t)
-				} else {
-					set.ExDate(t)
-				}
-			}
-		default:
-			return nil, fmt.Errorf("unsupported property: %v", name)
-		}
-	}
-
-	return &set, nil
 }
 
 // StrToDates is intended to parse RDATE and EXDATE properties supporting only

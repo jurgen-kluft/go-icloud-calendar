@@ -143,7 +143,7 @@ func (p *parser) parseEvents(cal *Calendar, eventsData []string) {
 		event.Owner = (cal)
 		event.ID = (event.GenerateUUID())
 
-		err := cal.InsertEvent(*event)
+		err := cal.InsertEvent(event)
 		if err != nil {
 			p.errorsOccured = append(p.errorsOccured, err)
 		}
