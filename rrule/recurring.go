@@ -189,14 +189,14 @@ func Daily(year int, month int, day int, interval int, count int) TemporalExpres
 // DayRangeExpression is a temporal expression that matches all
 // days between the Start and End values
 type DayRangeExpression struct {
-	Start Day
-	End   Day
+	Start DayExpression
+	End   DayExpression
 }
 
 // DayRange returns a temporal expression that matches all
 // days between the start and end days
 func DayRange(start, end int) DayRangeExpression {
-	return DayRangeExpression{Day(start), Day(end)}
+	return DayRangeExpression{DayExpression(start), DayExpression(end)}
 }
 
 // Includes returns true when the provided time's day falls

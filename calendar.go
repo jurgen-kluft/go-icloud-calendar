@@ -141,10 +141,18 @@ func (c *Calendar) InsertEvent(event *Event) (err error) {
 		var rule *rrule.RRule
 		rule, err = rrule.StrToRRule(event.Rrule)
 		if err == nil {
-			c.RecurringEvents = append(c.RecurringEvents, Index(-eventRef))
+			c.RecurringEvents = append(c.RecurringEvents, Index(eventRef))
 			c.RecurringEventRules = append(c.RecurringEventRules, rule)
 			err = rule.Compile(event.Start, event.End)
 		}
+
+		// faster search by id
+		c.EventsByID[event.ID] = Index(-eventRef)
+
+		if event.ImportedID != "" {
+			c.EventsByImportedID[event.ImportedID] = Index(-eventRef)
+		}
+
 	}
 
 	return err

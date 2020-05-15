@@ -36,19 +36,12 @@ func TestLoadCalendar2(t *testing.T) {
 		}
 	}
 
-	tl := calendar.GetTimeline(time.Now(), 1)
-	t.Logf("Timeline with %d days", len(tl.Events))
-	for day, events := range tl.Events {
-		t.Logf("Day %s; recurring events: %d", day, len(events))
-		for _, e := range events {
-			event, err := calendar.GetEventByIndex(e)
-			if err != nil {
-				t.Errorf("   Event by index error %s", err)
-			} else {
-				t.Logf("   Recurring event: %s", event.String())
-			}
-		}
+	events := calendar.GetEventsFor(time.Now())
+	t.Logf("Day %s; events: %d", time.Now(), len(events))
+	for _, event := range events {
+		t.Logf("   Event: %s", event.String())
 	}
+
 }
 func TestNewParser(t *testing.T) {
 	reader := readingFromFile("testCalendars/2eventsCal.ics")
