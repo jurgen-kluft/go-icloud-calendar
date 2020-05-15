@@ -314,6 +314,7 @@ func (r *RRule) DTStart(dt time.Time) {
 	}
 }
 
+// There is another good package on github for event recurrence: https://github.com/boombuler/recurrence
 // Compile will convert the RRule information into a TemporalExpression structure
 func (r *RRule) Compile(start time.Time, end time.Time) error {
 	if r.freq == YEARLY {
