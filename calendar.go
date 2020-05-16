@@ -3,7 +3,6 @@ package icalendar
 import (
 	"fmt"
 	"github.com/jurgen-kluft/go-icloud-calendar/rrule"
-	"math"
 	"time"
 )
 
@@ -14,7 +13,7 @@ type Calendar struct {
 	reader              Reader
 	parser              *parser
 	Version             float64
-	Timezone            time.Location
+	Timezone            *time.Location
 	Events              Events
 	EventsByDate        map[string][]Index
 	EventsByID          map[string]Index
@@ -24,16 +23,6 @@ type Calendar struct {
 }
 
 type Index int
-
-func (i Index) IsValid() bool {
-	return int(i) != math.MaxInt32
-}
-func (i Index) Invalid() Index {
-	return Index(math.MaxInt32)
-}
-func (i Index) ToInt() int {
-	return int(i)
-}
 
 // Events is an array of Event
 type Events []*Event
@@ -55,12 +44,13 @@ func newCalendar() *Calendar {
 	c := &Calendar{}
 	c.reader = nil
 	c.parser = nil
+	c.Timezone, _ = time.LoadLocation("UTC")
 	c.Events = make([]*Event, 0, 8)
 	c.EventsByDate = make(map[string][]Index)
 	c.EventsByID = make(map[string]Index)
 	c.EventsByImportedID = make(map[string]Index)
-	c.RecurringEvents = make([]Index, 0, 0)
-	c.RecurringEventRules = make([]*rrule.RRule, 0, 0)
+	c.RecurringEvents = make([]Index, 0, 8)
+	c.RecurringEventRules = make([]*rrule.RRule, 0, 8)
 	return c
 }
 
@@ -97,9 +87,9 @@ func (c *Calendar) Load() error {
 		c.EventsByDate = calendar.EventsByDate
 		c.EventsByID = calendar.EventsByID
 		c.EventsByImportedID = calendar.EventsByImportedID
+		c.RecurringEvents = calendar.RecurringEvents
+		c.RecurringEventRules = calendar.RecurringEventRules
 	}
-
-	// Sort ?
 
 	return err
 }
@@ -122,8 +112,8 @@ func (c *Calendar) InsertEvent(event *Event) (err error) {
 		eventStartTime := event.Start
 		eventEndTime := event.End
 		tz := c.Timezone
-		eventStartDate := time.Date(eventStartTime.Year(), eventStartTime.Month(), eventStartTime.Day(), 0, 0, 0, 0, &tz)
-		eventEndDate := time.Date(eventEndTime.Year(), eventEndTime.Month(), eventEndTime.Day(), 0, 0, 0, 0, &tz)
+		eventStartDate := time.Date(eventStartTime.Year(), eventStartTime.Month(), eventStartTime.Day(), 0, 0, 0, 0, tz)
+		eventEndDate := time.Date(eventEndTime.Year(), eventEndTime.Month(), eventEndTime.Day(), 0, 0, 0, 0, tz)
 
 		// faster search by date, add each date from start to end date
 		for eventDate := eventStartDate; eventDate.Before(eventEndDate) || eventDate.Equal(eventEndDate); eventDate = eventDate.Add(24 * time.Hour) {
@@ -141,16 +131,19 @@ func (c *Calendar) InsertEvent(event *Event) (err error) {
 		var rule *rrule.RRule
 		rule, err = rrule.StrToRRule(event.Rrule)
 		if err == nil {
+			err = rule.Compile(event.Start.UTC(), event.End.UTC())
+			if err != nil {
+				err = fmt.Errorf("rule %s has error %s for event %s", event.Rrule, err.Error(), event.String())
+			}
 			c.RecurringEvents = append(c.RecurringEvents, Index(eventRef))
 			c.RecurringEventRules = append(c.RecurringEventRules, rule)
-			err = rule.Compile(event.Start, event.End)
 		}
 
 		// faster search by id
-		c.EventsByID[event.ID] = Index(-eventRef)
+		c.EventsByID[event.ID] = Index(eventRef)
 
 		if event.ImportedID != "" {
-			c.EventsByImportedID[event.ImportedID] = Index(-eventRef)
+			c.EventsByImportedID[event.ImportedID] = Index(eventRef)
 		}
 
 	}
@@ -160,16 +153,8 @@ func (c *Calendar) InsertEvent(event *Event) (err error) {
 
 // GetEventByIndex get event by index
 func (c *Calendar) GetEventByIndex(e Index) (*Event, error) {
-	i := e.ToInt()
-	if i < 0 {
-		i = -i
-		if i < len(c.RecurringEvents) {
-			i = c.RecurringEvents[i].ToInt()
-		} else {
-			return nil, fmt.Errorf("There is no recurring event for index %d", i)
-		}
-	}
-	if i < len(c.Events) {
+	i := int(e)
+	if (i >= 0) && (i < len(c.Events)) {
 		return c.Events[i], nil
 	}
 	return nil, fmt.Errorf("There is no event for index %d", i)
@@ -181,7 +166,7 @@ func (c *Calendar) GetEventIndexByID(eventID string) (Index, error) {
 	if ok {
 		return event, nil
 	}
-	return event.Invalid(), fmt.Errorf("There is no event with id %s", eventID)
+	return Index(-1), fmt.Errorf("There is no event with id %s", eventID)
 }
 
 // GetEventIndexByImportedID get event by imported id
@@ -190,13 +175,13 @@ func (c *Calendar) GetEventIndexByImportedID(eventID string) (Index, error) {
 	if ok {
 		return event, nil
 	}
-	return event.Invalid(), fmt.Errorf("There is no event with id %s", eventID)
+	return Index(-1), fmt.Errorf("There is no event with id %s", eventID)
 }
 
 // GetEventIndicesByDate get all events for specified date
 func (c *Calendar) GetEventIndicesByDate(dateTime time.Time) []Index {
 	tz := c.Timezone
-	day := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, &tz)
+	day := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, tz)
 	events, ok := c.EventsByDate[day.Format(YmdHis)]
 	if ok {
 		return events
@@ -207,10 +192,11 @@ func (c *Calendar) GetEventIndicesByDate(dateTime time.Time) []Index {
 // GetEventsFor get all active events for specified date
 func (c *Calendar) GetEventsFor(dateTime time.Time) []*Event {
 	tz := c.Timezone
-	day := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, &tz)
+	day := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, tz)
 	today := []*Event{}
 	events, ok := c.EventsByDate[day.Format(YmdHis)]
 	if ok {
+		//fmt.Printf("Number of events by date = %d\n", len(events))
 		for _, i := range events {
 			event, err := c.GetEventByIndex(i)
 			if err == nil {
@@ -218,12 +204,16 @@ func (c *Calendar) GetEventsFor(dateTime time.Time) []*Event {
 			}
 		}
 	}
+
+	//fmt.Printf("Number of recurring events = %d\n", len(c.RecurringEventRules))
 	for i, rer := range c.RecurringEventRules {
 		if rer.Includes(dateTime) {
 			rei := c.RecurringEvents[i]
 			event, err := c.GetEventByIndex(rei)
 			if err == nil {
 				today = append(today, event)
+			} else {
+				fmt.Println(err)
 			}
 		}
 	}

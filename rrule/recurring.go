@@ -60,15 +60,14 @@ func (a AlwaysOrNeverExpression) Includes(t time.Time) bool {
 // DayEventExpression is a temporal expression that matches a time-window (start - end) on
 // one day.
 type DayEventExpression struct {
-	SHour int
-	SMin  int
-	EHour int
-	EMin  int
+	Start int
+	End   int
 }
 
 // Includes returns true when provided time matches the expression
-func (t DayEventExpression) Includes(c time.Time) bool {
-	return (c.Hour() >= t.SHour && c.Minute() >= t.SMin) && (c.Hour() <= t.EHour && c.Minute() < t.EMin)
+func (t DayEventExpression) Includes(dt time.Time) bool {
+	c := dt.Hour()*60 + dt.Minute()
+	return c >= t.Start && c < t.End
 }
 
 // DayEvents is a helper function that combines multiple DayEventExpression temporal
@@ -76,14 +75,16 @@ func (t DayEventExpression) Includes(c time.Time) bool {
 func DayEvents(slots ...DayEventExpression) TemporalExpression {
 	ee := make([]TemporalExpression, len(slots))
 	for i, d := range slots {
-		ee[i] = DayEventExpression{SHour: d.SHour, SMin: d.SMin, EHour: d.EHour, EMin: d.EMin}
+		ee[i] = DayEventExpression{Start: d.Start, End: d.End}
 	}
 	return Or(ee...)
 }
 
 // DayEvent is a helper function that creates a single DayEventExpression expression
 func DayEvent(start time.Time, end time.Time) TemporalExpression {
-	slot := DayEventExpression{SHour: start.Hour(), SMin: start.Minute(), EHour: end.Hour(), EMin: end.Minute()}
+	s := start.Hour()*60 + start.Minute()
+	e := s + int(end.Sub(start).Minutes())
+	slot := DayEventExpression{Start: s, End: e}
 	return slot
 }
 
@@ -174,7 +175,7 @@ func (t DailyExpression) Includes(c time.Time) bool {
 	end := time.Date(c.Year(), c.Month(), c.Day(), 0, 0, 0, 0, time.UTC)
 	days := int(end.Sub(start).Hours() / 24)
 	count := (days + (t.Interval - 1)) / t.Interval
-	return (days%(t.Interval)) == 0 && (t.Count == 0 || t.Count <= count)
+	return ((days % t.Interval) == 0) && ((t.Count == 0) || (count <= t.Count))
 }
 
 // Daily is a helper function that creates a single daily expression
@@ -252,9 +253,9 @@ type WeeklyExpression struct {
 func (t WeeklyExpression) Includes(c time.Time) bool {
 	start := time.Date(t.Year, time.Month(t.Month), t.Day, 0, 0, 0, 0, time.UTC)
 	end := time.Date(c.Year(), c.Month(), c.Day(), 0, 0, 0, 0, time.UTC)
-	days := int(end.Sub(start).Hours() / 24)
-	count := (days + (t.Interval - 1)) / t.Interval
-	return (days%t.Interval) == 0 && (t.Count == 0 || count <= t.Count)
+	weeks := int(end.Sub(start).Hours()/24) / 7
+	count := (weeks + (t.Interval - 1)) / t.Interval
+	return ((weeks % t.Interval) == 0) && ((t.Count == 0) || (count <= t.Count))
 }
 
 // Weekly is a helper function that creates a single weekly expression
@@ -412,7 +413,7 @@ func (m MonthlyExpression) Includes(c time.Time) bool {
 	}
 	months := (month + ((year - m.Year) * 12)) - m.Month
 	count := months / m.Interval
-	return (months%m.Interval) == 0 && (m.Count == 0 || count <= m.Count)
+	return ((months % m.Interval) == 0) && ((m.Count == 0) || (count <= m.Count))
 }
 
 // Monthly is a helper function that creates a single monthly expression
@@ -486,7 +487,7 @@ func (m YearlyExpression) Includes(c time.Time) bool {
 	}
 	years := (year - m.Year)
 	count := years / m.Interval
-	return (years%m.Interval) == 0 && (m.Count == 0 || count <= m.Count)
+	return ((years % m.Interval) == 0) && ((m.Count == 0) || (count <= m.Count))
 }
 
 // Yearly is a helper function that creates a single yearly expression

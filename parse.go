@@ -43,6 +43,9 @@ func (p *parser) read(cal *Calendar) error {
 
 	p.parseContent(cal, content)
 
+	for _, e := range p.errorsOccured {
+		fmt.Println(e)
+	}
 	if len(p.errorsOccured) == 0 {
 		return nil
 	}
@@ -96,7 +99,7 @@ func (p *parser) parseICalVersion(content string) float64 {
 	return ver
 }
 
-func (p *parser) parseICalTimezone(content string) time.Location {
+func (p *parser) parseICalTimezone(content string) *time.Location {
 	re, _ := regexp.Compile(`X-WR-TIMEZONE:.*?\n`)
 	result := re.FindString(content)
 
@@ -110,7 +113,7 @@ func (p *parser) parseICalTimezone(content string) time.Location {
 		p.errorsOccured = append(p.errorsOccured, err)
 		loc, _ = time.LoadLocation("UTC")
 	}
-	return *loc
+	return loc
 }
 
 // EVENTS PARSING

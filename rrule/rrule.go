@@ -147,10 +147,10 @@ func NewRRule(arg ROption) (*RRule, error) {
 	r := RRule{}
 	r.OrigOptions = arg
 	if arg.Dtstart.IsZero() {
-		arg.Dtstart = time.Now().UTC()
+		arg.Dtstart = time.Now()
 	}
 	arg.Dtstart = arg.Dtstart.Truncate(time.Second)
-	r.dtstart = arg.Dtstart
+	r.dtstart = arg.Dtstart.Local()
 	r.freq = arg.Freq
 	if arg.Interval == 0 {
 		r.interval = 1
@@ -162,7 +162,7 @@ func NewRRule(arg ROption) (*RRule, error) {
 		// add largest representable duration (approximately 290 years).
 		arg.Until = r.dtstart.Add(time.Duration(1<<63 - 1))
 	}
-	r.until = arg.Until
+	r.until = arg.Until.Local()
 	r.wkst = arg.Wkst.weekday
 	r.bysetpos = arg.Bysetpos
 	if len(arg.Byweekno) == 0 &&
@@ -314,22 +314,28 @@ func (r *RRule) DTStart(dt time.Time) {
 	}
 }
 
-// There is another good package on github for event recurrence: https://github.com/boombuler/recurrence
+// NOTE: There is another good package on github for event recurrence: https://github.com/boombuler/recurrence
+
 // Compile will convert the RRule information into a TemporalExpression structure
 func (r *RRule) Compile(start time.Time, end time.Time) error {
 	if r.freq == YEARLY {
-		r.compiled = And(AfterDate(start, true), Yearly(start.Year(), r.interval, r.count), DateRange(start, end))
+		//fmt.Printf("Compiled RRule '%s' into temporal yearly expression (%v - %v)\n", r.String(), start, end)
+		// Check for day events, like birthdays ...
+		r.compiled = And(AfterDate(r.dtstart, true), Yearly(start.Year(), r.interval, r.count), DateRange(start, end))
 		return nil
 	} else if r.freq == MONTHLY {
-		r.compiled = And(AfterDate(start, true), Monthly(start.Year(), int(start.Month()), r.interval, r.count), BeforeDate(end))
+		//fmt.Printf("Compiled RRule '%s' into temporal monthly expression (%v - %v)\n", r.String(), start, end)
+		r.compiled = And(AfterDate(r.dtstart, true), Monthly(start.Year(), int(start.Month()), r.interval, r.count), BeforeDate(end))
 		return nil
 	} else if r.freq == DAILY {
-		r.compiled = And(AfterDate(start, true), Daily(start.Year(), int(start.Month()), start.Day(), r.interval, r.count), BeforeDate(end))
+		//fmt.Printf("Compiled RRule '%s' into temporal daily expression (%v - %v)\n", r.String(), start, end)
+		r.compiled = And(Daily(start.Year(), int(start.Month()), start.Day(), r.interval, r.count))
+		r.compiled = And(r.compiled, DayEvent(start, end))
 		return nil
 	}
 
 	r.compiled = Never
-	return errors.New("Failed to compile RRule '%s' into temporal expression")
+	return errors.New(fmt.Sprintf("Failed to compile RRule '%s' into temporal expression", r.String()))
 }
 
 // Includes will determine if 'dt' is regarded by the TemporalExpression as included
