@@ -54,8 +54,8 @@ func (e *Event) GenerateUUID() string {
 }
 
 func (e *Event) String() string {
-	from := e.Start.Format(YmdHis)
-	to := e.End.Format(YmdHis)
+	from := e.Start.Local().Format(YmdHis)
+	to := e.End.Local().Format(YmdHis)
 	summ := e.Summary
 	status := e.Status
 	attendeeCount := len(e.Attendees)

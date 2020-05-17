@@ -44,7 +44,7 @@ func newCalendar() *Calendar {
 	c := &Calendar{}
 	c.reader = nil
 	c.parser = nil
-	c.Timezone, _ = time.LoadLocation("UTC")
+	c.Timezone = time.Local
 	c.Events = make([]*Event, 0, 8)
 	c.EventsByDate = make(map[string][]Index)
 	c.EventsByID = make(map[string]Index)
@@ -131,7 +131,7 @@ func (c *Calendar) InsertEvent(event *Event) (err error) {
 		var rule *rrule.RRule
 		rule, err = rrule.StrToRRule(event.Rrule)
 		if err == nil {
-			err = rule.Compile(event.Start.UTC(), event.End.UTC())
+			err = rule.Compile(event.Start, event.End)
 			if err != nil {
 				err = fmt.Errorf("rule %s has error %s for event %s", event.Rrule, err.Error(), event.String())
 			}
