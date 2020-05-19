@@ -41,8 +41,8 @@ func TestLoadCalendar2(t *testing.T) {
 	for _, event := range events {
 		t.Logf("   Event: %s", event.String())
 	}
-
 }
+
 func TestNewParser(t *testing.T) {
 	reader := readingFromFile("testCalendars/2eventsCal.ics")
 	parser := createParser(reader)
@@ -356,4 +356,61 @@ func TestCalendarMultidayEvent(t *testing.T) {
 
 	// Test a day after the end day
 	events = calendar.GetEventIndicesByDate(time.Date(2016, 11, 1, 0, 0, 0, 0, time.UTC))
+}
+
+func TestLoadCalendar5(t *testing.T) {
+	reader := readingFromFile("testCalendars/5dailyEvents.ics")
+	parser := createParser(reader)
+
+	calendar := newCalendar()
+	err := parser.read(calendar)
+
+	if err != nil {
+		parseErrors := parser.getErrors()
+		for i, pErr := range parseErrors {
+			t.Errorf("Parsing Error %d: %s", i, pErr)
+		}
+	}
+
+	now := time.Now()
+
+	wants := []struct {
+		Time time.Time
+		Name string
+	}{
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 0, 10, 0, 0, now.Location()), Name: "timeofday=night"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 1, 10, 0, 0, now.Location()), Name: "timeofday=night"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 2, 10, 0, 0, now.Location()), Name: "timeofday=night"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 3, 10, 0, 0, now.Location()), Name: "timeofday=night"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 4, 10, 0, 0, now.Location()), Name: "timeofday=night"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 5, 10, 0, 0, now.Location()), Name: "timeofday=night"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 6, 10, 0, 0, now.Location()), Name: "timeofday=breakfast"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 7, 10, 0, 0, now.Location()), Name: "timeofday=breakfast"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 8, 10, 0, 0, now.Location()), Name: "timeofday=breakfast"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 9, 10, 0, 0, now.Location()), Name: "timeofday=morning"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 10, 10, 0, 0, now.Location()), Name: "timeofday=morning"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 11, 10, 0, 0, now.Location()), Name: "timeofday=morning"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 12, 10, 0, 0, now.Location()), Name: "timeofday=noon"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 13, 10, 0, 0, now.Location()), Name: "timeofday=afternoon"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 14, 10, 0, 0, now.Location()), Name: "timeofday=afternoon"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 15, 10, 0, 0, now.Location()), Name: "timeofday=afternoon"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 16, 10, 0, 0, now.Location()), Name: "timeofday=afternoon"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 17, 10, 0, 0, now.Location()), Name: "timeofday=afternoon"},
+		{Time: time.Date(now.Year(), now.Month(), now.Day(), 18, 10, 0, 0, now.Location()), Name: "timeofday=evening"},
+	}
+
+	for _, want := range wants {
+		events := calendar.GetEventsFor(want.Time)
+		if len(events) == 1 {
+			if events[0].Summary != want.Name {
+				t.Errorf("timeofday; get %v, want %v", events[0].Summary, want.Name)
+			}
+		} else {
+			t.Error("timeofday; should only have 1 event")
+		}
+		//t.Logf("Day %s; events: %d", dt, len(events))
+		//for _, event := range events {
+		//	t.Logf("   Event: %s", event.String())
+		//}
+	}
 }

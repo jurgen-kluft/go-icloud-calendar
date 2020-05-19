@@ -124,6 +124,8 @@ func (p *parser) parseEvents(cal *Calendar, eventsData []string) {
 
 		start := p.parseEventStart(eventData)
 		end := p.parseEventEnd(eventData)
+		recurrence := p.parseEventRecurrence(eventData)
+
 		// whole day event when both times are 00:00:00
 		wholeDay := start.Hour() == 0 && end.Hour() == 0 && start.Minute() == 0 && end.Minute() == 0 && start.Second() == 0 && end.Second() == 0
 
@@ -140,6 +142,7 @@ func (p *parser) parseEvents(cal *Calendar, eventsData []string) {
 		event.Geo = (p.parseEventGeo(eventData))
 		event.Start = (start)
 		event.End = (end)
+		event.RecurrenceID = (recurrence)
 		event.IsWholeDayEvent = (wholeDay)
 		event.Attendees = (p.parseEventAttendees(eventData))
 		event.Organizer = (p.parseEventOrganizer(eventData))
@@ -206,45 +209,19 @@ func (p *parser) parseEventModified(eventData string) time.Time {
 	return t
 }
 
-func (p *parser) parseEventStart(eventData string) time.Time {
-	reWholeDay, _ := regexp.Compile(`DTSTART;VALUE=DATE:.*?\n`)
-	re, _ := regexp.Compile(`DTSTART(;TZID=.*?){0,1}:.*?\n`)
+func parseEventTime(eventName string, eventData string) time.Time {
+	reWholeDay, _ := regexp.Compile(eventName + `;VALUE=DATE:.*?\n`)
+	re, _ := regexp.Compile(eventName + `(;TZID=.*?){0,1}:.*?\n`)
 	resultWholeDay := reWholeDay.FindString(eventData)
 	var t time.Time
-
 	if resultWholeDay != "" {
 		// whole day event
-		modified := trimField(resultWholeDay, "DTSTART;VALUE=DATE:")
-		t, _ = time.Parse(IcsFormatWholeDay, modified)
-	} else {
-		// event that has start hour and minute
-		result := re.FindString(eventData)
-		modified := trimField(result, "DTSTART(;TZID=.*?){0,1}:")
-
-		if !strings.Contains(modified, "Z") {
-			modified = fmt.Sprintf("%sZ", modified)
-		}
-
-		t, _ = time.Parse(IcsFormat, modified)
-	}
-
-	return t
-}
-
-func (p *parser) parseEventEnd(eventData string) time.Time {
-	reWholeDay, _ := regexp.Compile(`DTEND;VALUE=DATE:.*?\n`)
-	re, _ := regexp.Compile(`DTEND(;TZID=.*?){0,1}:.*?\n`)
-	resultWholeDay := reWholeDay.FindString(eventData)
-	var t time.Time
-
-	if resultWholeDay != "" {
-		// whole day event
-		modified := trimField(resultWholeDay, "DTEND;VALUE=DATE:")
+		modified := trimField(resultWholeDay, eventName+";VALUE=DATE:")
 		t, _ = time.Parse(IcsFormatWholeDay, modified)
 	} else {
 		// event that has end hour and minute
 		result := re.FindString(eventData)
-		modified := trimField(result, "DTEND(;TZID=.*?){0,1}:")
+		modified := trimField(result, eventName+"(;TZID=.*?){0,1}:")
 
 		if !strings.Contains(modified, "Z") {
 			modified = fmt.Sprintf("%sZ", modified)
@@ -252,7 +229,18 @@ func (p *parser) parseEventEnd(eventData string) time.Time {
 		t, _ = time.Parse(IcsFormat, modified)
 	}
 	return t
+}
 
+func (p *parser) parseEventStart(eventData string) time.Time {
+	return parseEventTime("DTSTART", eventData)
+}
+
+func (p *parser) parseEventEnd(eventData string) time.Time {
+	return parseEventTime("DTEND", eventData)
+}
+
+func (p *parser) parseEventRecurrence(eventData string) time.Time {
+	return parseEventTime("RECURRENCE-ID", eventData)
 }
 
 func (p *parser) parseEventRRule(eventData string) string {

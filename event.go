@@ -12,6 +12,7 @@ type Event struct {
 	End             time.Time
 	Created         time.Time
 	Modified        time.Time
+	RecurrenceID    time.Time
 	AlarmTime       time.Duration
 	ImportedID      string
 	Status          string
@@ -54,10 +55,13 @@ func (e *Event) GenerateUUID() string {
 }
 
 func (e *Event) String() string {
-	from := e.Start.Local().Format(YmdHis)
-	to := e.End.Local().Format(YmdHis)
+	from := e.Start.Format(YmdHis)
+	to := e.End.Format(YmdHis)
+	modified := "NA"
+	if e.Modified.IsZero() == false {
+		modified = e.Modified.Format(YmdHis)
+	}
 	summ := e.Summary
 	status := e.Status
-	attendeeCount := len(e.Attendees)
-	return fmt.Sprintf("Event(%s) from %s to %s about %s . %d people are invited to it", status, from, to, summ, attendeeCount)
+	return fmt.Sprintf("Event(%s) from %s to %s about %s (modified: %s, uuid:%s)", status, from, to, summ, modified, e.ImportedID)
 }
