@@ -57,5 +57,8 @@ func (r *readFromFile) Read() (string, error) {
 
 // ReadingFromFile returns a Reader instance that will read from file 'filepath'
 func readingFromFile(filepath string) Reader {
+	if strings.HasPrefix(filepath, "file://") {
+		filepath = strings.Replace(filepath, "file://", "", 1)
+	}
 	return &readFromFile{filepath: filepath}
 }

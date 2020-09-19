@@ -408,9 +408,9 @@ func TestLoadCalendar5(t *testing.T) {
 		} else {
 			t.Error("timeofday; should only have 1 event")
 		}
-		//t.Logf("Day %s; events: %d", dt, len(events))
-		//for _, event := range events {
-		//	t.Logf("   Event: %s", event.String())
-		//}
+		t.Logf("Day %s; events: %d", want.Time, len(events))
+		for _, event := range events {
+			t.Logf("   Event: %s", event.String())
+		}
 	}
 }

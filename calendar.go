@@ -2,8 +2,9 @@ package icalendar
 
 import (
 	"fmt"
-	"github.com/jurgen-kluft/go-icloud-calendar/rrule"
 	"time"
+
+	"github.com/jurgen-kluft/go-icloud-calendar/rrule"
 )
 
 // Calendar is a structure that mainly contains events
@@ -40,8 +41,9 @@ func (events Events) Swap(i, j int) {
 	events[i], events[j] = events[j], events[i]
 }
 
-func newCalendar() *Calendar {
+func newCalendar(name string) *Calendar {
 	c := &Calendar{}
+	c.Name = name
 	c.reader = nil
 	c.parser = nil
 	c.Timezone = time.Local
@@ -55,23 +57,23 @@ func newCalendar() *Calendar {
 }
 
 // NewURLCalendar returns a new instance of a Calendar that has a URL source
-func NewURLCalendar(URL string) *Calendar {
-	c := newCalendar()
+func NewURLCalendar(name string, URL string) *Calendar {
+	c := newCalendar(name)
 	c.reader = readingFromURL(URL)
 	c.parser = createParser(c.reader)
 	return c
 }
 
 // NewFileCalendar returns a new instance of a Calendar that has a file source
-func NewFileCalendar(filepath string) *Calendar {
-	c := newCalendar()
+func NewFileCalendar(name string, filepath string) *Calendar {
+	c := newCalendar(name)
 	c.reader = readingFromFile(filepath)
 	c.parser = createParser(c.reader)
 	return c
 }
 
 func (c *Calendar) Load() error {
-	calendar := newCalendar()
+	calendar := newCalendar(c.Name)
 	calendar.parser = c.parser
 	calendar.reader = c.reader
 	err := c.parser.read(calendar)
